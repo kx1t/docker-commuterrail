@@ -12,19 +12,20 @@ permissions:
 
 jobs:
   build-platform:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        platform:
-          - linux/amd64
-          - linux/arm64
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+            arch_tag: amd64
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            arch_tag: arm64
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -48,7 +49,7 @@ jobs:
           cache-from: type=gha,scope=build-${{ matrix.platform }}
           cache-to: type=gha,mode=max,scope=build-${{ matrix.platform }}
           tags: |
-            ghcr.io/kx1t/docker-commuterrail:${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}-${{ github.sha }}
+            ghcr.io/kx1t/docker-commuterrail:${{ matrix.arch_tag }}-${{ github.sha }}
 
   create-manifest:
     needs: build-platform
