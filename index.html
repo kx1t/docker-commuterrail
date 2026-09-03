@@ -289,9 +289,9 @@
         const transitHtml = transits.length ? transits.map((item) => {
           const expiresAt = item.last_refresh ? item.last_refresh + 60 : null;
           const ttl = expiresAt ? Math.max(0, Math.ceil(expiresAt - (Date.now() / 1000))) : 0;
-          const hitSummary = `1m ${item.hits_last_minute || 0} / 1h ${item.hits_last_hour || 0} / 24h ${item.hits_last_day || 0}`;
-          const missSummary = `1m ${item.misses_last_minute || 0} / 1h ${item.misses_last_hour || 0} / 24h ${item.misses_last_day || 0}`;
-          const refreshSummary = `1m ${item.refreshes_last_minute || 0} / 1h ${item.refreshes_last_hour || 0} / 24h ${item.refreshes_last_day || 0}`;
+          const hitSummary = `${item.hits_last_minute || 0} / ${item.hits_last_hour || 0} / ${item.hits_last_day || 0}`;
+          const missSummary = `${item.misses_last_minute || 0} / ${item.misses_last_hour || 0} / ${item.misses_last_day || 0}`;
+          const refreshSummary = `${item.refreshes_last_minute || 0} / ${item.refreshes_last_hour || 0} / ${item.refreshes_last_day || 0}`;
           return `
             <tr>
               <td>${item.transit || 'unknown'}</td>
