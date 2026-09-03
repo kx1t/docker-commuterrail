@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 import json
+import mimetypes
 import os
 import socket
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 from urllib.request import Request, urlopen
 
@@ -14,6 +16,7 @@ PORT = int(os.getenv('PORT', '8000'))
 PRIM_API_KEY = os.getenv('PRIM_API_KEY', '')
 MAX_THREADS = int(os.getenv('HTTP_WORKERS', '10'))
 DEFAULT_PARIS_PATH = 'estimated-timetable?LineRef=STIF:Line::C01379:'
+STATIC_ROOT = Path('/app')
 
 cache_lock = threading.RLock()
 cache_store = {}
@@ -125,6 +128,22 @@ def refresh_loop():
         time.sleep(CACHE_TTL_SECONDS)
 
 
+def serve_static_file(self, relative_path: str):
+    candidate = (STATIC_ROOT / relative_path.lstrip('/')).resolve()
+    if not str(candidate).startswith(str(STATIC_ROOT.resolve())):
+        candidate = STATIC_ROOT / 'index.html'
+    if candidate.is_dir():
+        candidate = STATIC_ROOT / 'index.html'
+    if not candidate.exists():
+        candidate = STATIC_ROOT / 'index.html'
+    data = candidate.read_bytes()
+    mime_type = mimetypes.guess_type(str(candidate))[0] or 'application/octet-stream'
+    self.send_response(200)
+    self.send_header('Content-Type', mime_type)
+    self.end_headers()
+    self.wfile.write(data)
+
+
 class TransitCacheHandler(BaseHTTPRequestHandler):
     server_version = 'TransitCache/1.0'
 
@@ -143,26 +162,39 @@ class TransitCacheHandler(BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps({'status': 'ok', 'transit': transit}).encode())
                 return
 
-            try:
-                cached = get_cached_payload(transit, endpoint)
-                if cached is None:
-                    cached = fetch_and_cache(transit, endpoint)
-                self.send_response(200)
-                self.send_header('Cache-Control', 'no-store')
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                body = build_json_response(transit, endpoint, payload=cached['data'], stale=(cached.get('expires_at', 0) <= current_timestamp()))
-                self.wfile.write(json.dumps(body).encode('utf-8'))
-            except Exception as exc:
-                stale = get_cached_payload(transit, endpoint)
-                if stale:
-                    body = build_json_response(transit, endpoint, payload=stale['data'], stale=True)
-                else:
-                    body = build_json_response(transit, endpoint, error=str(exc))
-                self.send_response(200 if stale else 502)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps(body).encode('utf-8'))
+            if parsed.path in ('/api/cache', '/cache') or parsed.path.startswith('/api/cache/'):
+                try:
+                    cached = get_cached_payload(transit, endpoint)
+                    if cached is None:
+                        cached = fetch_and_cache(transit, endpoint)
+                    self.send_response(200)
+                    self.send_header('Cache-Control', 'no-store')
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    body = build_json_response(transit, endpoint, payload=cached['data'], stale=(cached.get('expires_at', 0) <= current_timestamp()))
+                    self.wfile.write(json.dumps(body).encode('utf-8'))
+                except Exception as exc:
+                    stale = get_cached_payload(transit, endpoint)
+                    if stale:
+                        body = build_json_response(transit, endpoint, payload=stale['data'], stale=True)
+                    else:
+                        body = build_json_response(transit, endpoint, error=str(exc))
+                    self.send_response(200 if stale else 502)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps(body).encode('utf-8'))
+                return
+
+            if parsed.path in ('/', '/index.html', '/commuterrail', '/commuterrail/') or parsed.path.startswith('/commuterrail'):
+                serve_static_file(self, '/index.html')
+                return
+
+            if parsed.path.startswith('/'):
+                serve_static_file(self, parsed.path)
+                return
+
+            self.send_response(404)
+            self.end_headers()
         finally:
             self.server.get_semaphore().release()
 

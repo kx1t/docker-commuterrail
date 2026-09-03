@@ -17,6 +17,8 @@ RUN apt-get update \
 ENV PATH="/opt/venv/bin:$PATH"
 
 COPY app /app/app
+COPY index.html /app/index.html
+COPY runtime-config.php /app/runtime-config.php
 COPY README.md /app/README.md
 
 EXPOSE 8000
