@@ -1,77 +1,73 @@
 # Fitchburg Line Live Departures
 
-A single-file MBTA Commuter Rail dashboard. CSS, JavaScript, install metadata, and the favicon are all embedded in `index.html`; it needs no build step and can be served directly by nginx.
+This repository contains the front-end dashboard and a small Dockerized cache service for Paris PRIM data. The cache service runs on a single port and keeps a 60-second in-memory cache so the browser does not call the upstream API directly on every refresh.
 
-## Deploy with nginx
+## Containerized cache architecture
 
-Copy the contents of this folder to the web root configured for your site:
+The page should call the local cache service instead of PRIM directly. The cache service fetches live Paris data once per minute, caches it in memory, and serves that to the browser. This reduces quota consumption and avoids repeated browser requests from causing upstream 429s.
 
-```sh
-sudo mkdir -p /var/www/fitchburg-rail
-sudo install -m 0644 index.html /var/www/fitchburg-rail/index.html
-sudo install -m 0644 runtime-config.php /var/www/fitchburg-rail/runtime-config.php
-```
+### Runtime env vars
 
-Deploy to your current production target (copies both files, then installs with root ownership and correct permissions):
+The cache container uses Docker environment variables instead of a JSON file. Set the API key using environment variables such as:
 
 ```sh
-scp index.html runtime-config.php pi@webproxy:/tmp/ && \
-ssh pi@webproxy 'sudo install -o root -g root -m 0644 /tmp/index.html /opt/webproxy/webproxy/html/commuterrail/index.html && sudo install -o root -g root -m 0644 /tmp/runtime-config.php /opt/webproxy/webproxy/html/commuterrail/runtime-config.php && rm -f /tmp/index.html /tmp/runtime-config.php'
+PRIM_API_KEY=your-prim-key
+CACHE_TTL_SECONDS=60
+PORT=80
+HTTP_WORKERS=10
 ```
 
-Example server block:
+### Docker Compose example
 
-```nginx
-server {
-    listen 80;
-    server_name rail.example.com;
-    root /var/www/fitchburg-rail;
-    index index.html;
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-}
+```yaml
+services:
+  commuterrail-cache:
+    image: ghcr.io/kx1t/docker-commuterrail:latest
+    container_name: commuterrail-cache
+    restart: unless-stopped
+    environment:
+      PORT: "80"
+      CACHE_TTL_SECONDS: "60"
+      HTTP_WORKERS: "10"
+      PRIM_API_KEY: "${PRIM_API_KEY}"
+    ports:
+      - "80:80"
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+      - /run:rw,noexec,nosuid,size=32m
+    read_only: true
 ```
 
-The page calls the public MBTA v3 API from the browser. For Boston, pass `boston_api_key=YOUR_KEY`; the older `api_key=YOUR_KEY` parameter remains supported as an alias. The optional `transit` parameter selects the provider: omit it or use `?transit=boston` for MBTA, or use `?transit=paris` for RATP/IDFM. The value is case-insensitive. For Paris, pass `paris_api_key=YOUR_KEY`. Paris uses the official PRIM `estimated-timetable` endpoint and sends the client-side token as the documented `apikey` header. Tap the current line name to choose another line, endpoint, and remote station. The selected values are saved separately for each provider in browser storage. Boston defaults to the existing Fitchburg/Belmont/North Station setup; Paris defaults to Metro line 9, Saint-Ambroise, and Pont de Sèvres. The page refreshes every 60 seconds and can also be refreshed manually.
+This exposes port 80 on the host and keeps all non-persistent runtime files in tmpfs, matching the requirement that cached values and ephemeral runtime directories should not be on disk.
 
-## Runtime API key loading (no key in URL)
+### Reverse proxy layout
 
-The page now tries to load keys from same-origin runtime config files when URL parameters are not provided:
+The container is designed to sit behind a reverse proxy. The app itself does not need TLS. The web UI should keep the same single-endpoint pattern with a `transit` GET parameter, but instead of talking straight to PRIM it pings the cache service.
 
-1. `runtime-config.json` (static hosting friendly)
-1. `runtime-config.php` (if server-side PHP is enabled)
+Example browser request:
 
-### Option A: static JSON file (works on static-only hosting)
-
-1. Copy `runtime-config.json.example` to `/opt/webproxy/secrets/runtime-config.json` on the server.
-1. Fill in real keys and do not commit this file.
-1. If using `runtime-config.php`, this path is the default location it reads.
-
-### Option B: PHP endpoint backed by non-web file
-
-1. Deploy `runtime-config.php` in the same directory as `index.html`.
-1. Ensure your web server executes PHP (for example via php-fpm). If PHP is not enabled, this file will be served as text and will not work as an endpoint.
-1. Create a non-web-accessible file on the server at:
-    - `/opt/webproxy/secrets/commuterrail-config.php`
-1. Use this file format (copy from `commuterrail-config.php.example`):
-
-```php
-<?php
-
-return [
-    'boston_api_key' => 'replace-with-boston-key',
-    'paris_api_key' => 'replace-with-paris-key',
-];
+```text
+https://example.com/commuterrail/?transit=paris
 ```
 
-1. Lock down permissions so only the web server user can read that file.
+The reverse proxy can route that to the cache service or to a static frontend that uses the cache service as a backend.
 
-Notes:
+## Front-end behavior
 
-- This removes keys from the page URL and browser history.
-- Advanced users can still inspect network traffic and view the returned token values.
-- Keep quotas/rate limits conservative and rotate keys when needed.
+The page still supports the single endpoint with `transit` selection. For Paris, the frontend should call the cache service endpoint rather than the upstream PRIM API directly. The cache service maintains a 60-second TTL and serves a response until the next fetch window.
 
-For an iPhone shortcut, open the deployed HTTPS URL in Safari, tap Share, then Add to Home Screen. HTTPS is recommended so the manifest and live API requests work reliably.
+## Docker build and deployment
+
+The image is intended to be published as a multi-arch image to GHCR on each push to `main`:
+
+```sh
+docker buildx build --platform linux/amd64,linux/arm64 --push -t ghcr.io/kx1t/docker-commuterrail:latest .
+```
+
+The repo includes a GitHub Action that performs this build automatically.
+
+## Notes
+
+- No JSON secret file is used. All secret configuration comes from Docker environment variables.
+- Cache values are in-memory only and should live in tmpfs-backed runtime memory.
+- This design keeps the service stateless, simple, and suitable for container deployment behind nginx or another reverse proxy.

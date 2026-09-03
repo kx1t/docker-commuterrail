@@ -1,0 +1,18 @@
+version: "3.9"
+
+services:
+  commuterrail-cache:
+    image: ghcr.io/kx1t/docker-commuterrail:latest
+    container_name: commuterrail-cache
+    restart: unless-stopped
+    environment:
+      PORT: "80"
+      CACHE_TTL_SECONDS: "60"
+      HTTP_WORKERS: "10"
+      PRIM_API_KEY: "${PRIM_API_KEY}"
+    ports:
+      - "80:80"
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+      - /run:rw,noexec,nosuid,size=32m
+    read_only: true
