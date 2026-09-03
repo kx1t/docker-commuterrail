@@ -291,30 +291,61 @@ def build_stats_payload():
                 'first_seen': client.get('first_seen'),
                 'last_seen': client.get('last_seen'),
             })
+
+        by_endpoint = {}
         for transit_name, transit_bucket in sorted((cache_stats.get('transits') or {}).items()):
-            for key, entry in sorted((transit_bucket or {}).items(), key=lambda item: item[1].get('last_access') or 0, reverse=True):
-                snapshot['transits'].append({
+            for key, entry in (transit_bucket or {}).items():
+                endpoint = entry.get('endpoint') or 'unknown'
+                bucket = by_endpoint.setdefault((transit_name, endpoint), {
                     'transit': transit_name,
-                    'cache_key': key,
-                    'endpoint': entry.get('endpoint'),
-                    'query': entry.get('query') or {},
-                    'last_access': entry.get('last_access'),
-                    'last_hit': entry.get('last_hit'),
-                    'last_miss': entry.get('last_miss'),
-                    'last_refresh': entry.get('last_refresh'),
-                    'hits_last_minute': count_recent(entry.get('hits') or [], 60),
-                    'hits_last_hour': count_recent(entry.get('hits') or [], 3600),
-                    'hits_last_day': count_recent(entry.get('hits') or [], 86400),
-                    'misses_last_minute': count_recent(entry.get('misses') or [], 60),
-                    'misses_last_hour': count_recent(entry.get('misses') or [], 3600),
-                    'misses_last_day': count_recent(entry.get('misses') or [], 86400),
-                    'refreshes_last_minute': count_recent(entry.get('refreshes') or [], 60),
-                    'refreshes_last_hour': count_recent(entry.get('refreshes') or [], 3600),
-                    'refreshes_last_day': count_recent(entry.get('refreshes') or [], 86400),
-                    'requests_last_minute': count_recent(entry.get('requests') or [], 60),
-                    'requests_last_hour': count_recent(entry.get('requests') or [], 3600),
-                    'requests_last_day': count_recent(entry.get('requests') or [], 86400),
+                    'endpoint': endpoint,
+                    'query': {},
+                    'last_access': None,
+                    'last_hit': None,
+                    'last_miss': None,
+                    'last_refresh': None,
+                    'hits': [],
+                    'misses': [],
+                    'refreshes': [],
+                    'requests': [],
                 })
+                bucket['query'] = bucket.get('query') or {}
+                for field in ('hits', 'misses', 'refreshes', 'requests'):
+                    bucket[field].extend(entry.get(field) or [])
+                for field in ('last_access', 'last_hit', 'last_miss', 'last_refresh'):
+                    value = entry.get(field)
+                    if value is not None:
+                        current_value = bucket.get(field)
+                        if current_value is None or float(value) > float(current_value):
+                            bucket[field] = value
+
+        for (transit_name, endpoint), bucket in sorted(by_endpoint.items(), key=lambda item: (item[0][0], item[1].get('last_access') or 0), reverse=True):
+            hits = bucket.get('hits') or []
+            misses = bucket.get('misses') or []
+            refreshes = bucket.get('refreshes') or []
+            requests = bucket.get('requests') or []
+            snapshot['transits'].append({
+                'transit': transit_name,
+                'cache_key': f"{transit_name}::{endpoint}",
+                'endpoint': endpoint,
+                'query': bucket.get('query') or {},
+                'last_access': bucket.get('last_access'),
+                'last_hit': bucket.get('last_hit'),
+                'last_miss': bucket.get('last_miss'),
+                'last_refresh': bucket.get('last_refresh'),
+                'hits_last_minute': count_recent(hits, 60),
+                'hits_last_hour': count_recent(hits, 3600),
+                'hits_last_day': count_recent(hits, 86400),
+                'misses_last_minute': count_recent(misses, 60),
+                'misses_last_hour': count_recent(misses, 3600),
+                'misses_last_day': count_recent(misses, 86400),
+                'refreshes_last_minute': count_recent(refreshes, 60),
+                'refreshes_last_hour': count_recent(refreshes, 3600),
+                'refreshes_last_day': count_recent(refreshes, 86400),
+                'requests_last_minute': count_recent(requests, 60),
+                'requests_last_hour': count_recent(requests, 3600),
+                'requests_last_day': count_recent(requests, 86400),
+            })
     return snapshot
 
 
