@@ -10,25 +10,15 @@ The page should call the local cache service instead of PRIM or MBTA directly. F
 
 The cache container uses Docker environment variables instead of a JSON file. Set the upstream keys using environment variables such as:
 
-```sh
-PRIM_API_KEY=your-paris-key
-MBTA_API_KEY=your-mbta-key
-# or BOSTON_API_KEY=your-mbta-key
-# or API_KEY=your-mbta-key
-CACHE_TTL_SECONDS=60
-PORT=80
-HTTP_WORKERS=10
-```
-
 This is the MBTA-side implementation of the caching scheme: the server records the last request time per transit authority, only refreshes when a recent browser request exists, and serves stale data with a warning if refreshing fails.
 
 ### Docker Compose example
 
 ```yaml
 services:
-  commuterrail-cache:
+  commuterrail:
     image: ghcr.io/kx1t/docker-commuterrail:latest
-    container_name: commuterrail-cache
+    container_name: commuterrail
     restart: unless-stopped
     environment:
       PORT: "80"
