@@ -10,7 +10,7 @@ services:
       PRIM_API_KEY: "${PRIM_API_KEY}"
       MBTA_API_KEY: "${MBTA_API_KEY}"
     ports:
-      - "80:80"
+      - "8000:80"
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=64m
       - /run:rw,noexec,nosuid,size=32m
