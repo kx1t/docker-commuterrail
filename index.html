@@ -41,6 +41,86 @@
       .loading-state, .empty-state { min-height: 100px; font-size: 9px; }
       .app-footer { gap: 5px; padding-top: 12px; font-size: 8px; }
     }
+    .stats-dialog {
+      width: min(100vw - 20px, 760px);
+      max-width: 760px;
+      min-height: min(90vh, 760px);
+      border: 0;
+      border-radius: 22px;
+      padding: 0;
+      background: #f5f7f8;
+      box-shadow: 0 24px 60px rgba(16,42,67,0.28);
+    }
+    .stats-dialog::backdrop {
+      background: rgba(16,42,67,0.55);
+    }
+    .stats-page {
+      display: flex;
+      flex-direction: column;
+      height: min(90vh, 760px);
+      font-family: var(--sans);
+      color: var(--ink);
+    }
+    .stats-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 18px 18px 14px;
+      border-bottom: 1px solid var(--rule);
+      background: linear-gradient(180deg, #edf5f1, #f5f7f8);
+    }
+    .stats-header h2 {
+      margin: 0;
+      font-size: clamp(22px, 5vw, 32px);
+      letter-spacing: -0.04em;
+    }
+    .close-stats {
+      border: 1px solid var(--rule);
+      background: white;
+      color: var(--ink);
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-weight: 600;
+    }
+    .stats-body {
+      overflow: auto;
+      padding: 16px 18px 22px;
+    }
+    .stats-section {
+      margin-bottom: 16px;
+      border: 1px solid var(--rule);
+      background: white;
+      border-radius: 16px;
+      padding: 12px;
+    }
+    .stats-section h3 {
+      margin: 0 0 10px;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 8px;
+    }
+    .kpi { border: 1px solid var(--rule); background: #fafbfc; border-radius: 12px; padding: 10px; }
+    .kpi-label { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
+    .kpi-value { display: block; font-weight: 700; font-size: 22px; margin-top: 6px; }
+    .stats-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .stats-table th, .stats-table td { border-bottom: 1px solid var(--rule); padding: 7px 4px; text-align: left; vertical-align: top; }
+    .stats-table th { color: var(--muted); font-weight: 600; }
+    .muted { color: var(--muted); }
+    .badge { display: inline-block; border-radius: 999px; padding: 4px 8px; background: #edf8f2; color: var(--green); font-size: 11px; font-weight: 700; }
+    @media (max-width: 520px) {
+      .stats-dialog { width: calc(100vw - 12px); min-height: 92vh; padding: 0; }
+      .stats-page { height: 92vh; }
+      .stats-header { padding: 14px 14px 12px; }
+      .stats-body { padding: 12px 14px 18px; }
+      .stats-table { font-size: 11px; }
+    }
   </style>
   <title>Transit departures</title>
 </head>
@@ -92,13 +172,24 @@
     </div>
 
     <footer class="app-footer">
-      <span id="provider-footer">Data from MBTA</span>
+      <button id="provider-footer" type="button" class="provider-footer-button" style="background:none;border:none;padding:0;color:inherit;font:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:3px;">Data from MBTA</button>
       <span class="footer-separator">•</span>
       <span>Times shown in your local timezone</span>
       <span class="footer-separator">•</span>
       <span>&copy; 2026 Ramon F. Kolb, kx1t</span>
     </footer>
   </main>
+  <dialog id="stats-dialog" class="stats-dialog">
+    <div class="stats-page">
+      <div class="stats-header">
+        <h2>Cache diagnostics</h2>
+        <button type="button" class="close-stats" id="stats-close">Close</button>
+      </div>
+      <div class="stats-body" id="stats-body">
+        <div class="loading-state">Loading cache diagnostics…</div>
+      </div>
+    </div>
+  </dialog>
   <dialog class="settings-dialog" id="settings-dialog">
     <form class="settings-content" id="settings-form" method="dialog">
       <h2>Choose your route</h2>
@@ -124,7 +215,7 @@
     }
     const transitMode=(new URLSearchParams(location.search).get('transit')||'boston').toLowerCase()==='paris'?'paris':'boston';
     const PARIS_LINES=[...Array(14)].map((_,i)=>({id:`metro-${i+1}`,name:`Metro line ${i+1}`,mode:'metro',lineRef:i===8?'STIF:Line::C01379:':null})).concat(['A','B','C','D','E'].map((id)=>({id:`rer-${id}`,name:`RER ${id}`,mode:'rer',lineRef:null})));
-    const el={inbound:document.querySelector('#inbound-trains'),outbound:document.querySelector('#outbound-trains'),refresh:document.querySelector('#refresh-button'),status:document.querySelector('#status-message'),dot:document.querySelector('#status-dot'),updated:document.querySelector('#updated-at'),lineMark:document.querySelector('#line-mark'),lineSelector:document.querySelector('#line-selector'),lineTitle:document.querySelector('#line-title'),providerLabel:document.querySelector('#provider-label'),providerFooter:document.querySelector('#provider-footer'),routeSummary:document.querySelector('#route-summary'),inboundTitle:document.querySelector('#inbound-title'),outboundTitle:document.querySelector('#outbound-title'),dialog:document.querySelector('#settings-dialog'),form:document.querySelector('#settings-form'),lineField:document.querySelector('#line-field'),endpointField:document.querySelector('#endpoint-field'),remoteField:document.querySelector('#remote-field'),lineSelect:document.querySelector('#line-select'),endpointSelect:document.querySelector('#endpoint-select'),remoteSelect:document.querySelector('#remote-select'),cancelSettings:document.querySelector('#cancel-settings')};
+    const el={inbound:document.querySelector('#inbound-trains'),outbound:document.querySelector('#outbound-trains'),refresh:document.querySelector('#refresh-button'),status:document.querySelector('#status-message'),dot:document.querySelector('#status-dot'),updated:document.querySelector('#updated-at'),lineMark:document.querySelector('#line-mark'),lineSelector:document.querySelector('#line-selector'),lineTitle:document.querySelector('#line-title'),providerLabel:document.querySelector('#provider-label'),providerFooter:document.querySelector('#provider-footer'),routeSummary:document.querySelector('#route-summary'),inboundTitle:document.querySelector('#inbound-title'),outboundTitle:document.querySelector('#outbound-title'),dialog:document.querySelector('#settings-dialog'),statsDialog:document.querySelector('#stats-dialog'),statsBody:document.querySelector('#stats-body'),statsClose:document.querySelector('#stats-close'),form:document.querySelector('#settings-form'),lineField:document.querySelector('#line-field'),endpointField:document.querySelector('#endpoint-field'),remoteField:document.querySelector('#remote-field'),lineSelect:document.querySelector('#line-select'),endpointSelect:document.querySelector('#endpoint-select'),remoteSelect:document.querySelector('#remote-select'),cancelSettings:document.querySelector('#cancel-settings')};
     let routes=transitMode==='paris'?PARIS_LINES:[],routeStops=[],selectedRouteId=transitMode==='paris'?'metro-9':DEFAULT_ROUTE,selectedRemoteId=transitMode==='paris'?'saint-ambroise':DEFAULT_REMOTE,selectedEndpointId=transitMode==='paris'?'pont-de-sevres':DEFAULT_ENDPOINT;
     try{const saved=JSON.parse(localStorage.getItem(`${STORAGE_KEY}-${transitMode}`)||localStorage.getItem('fitchburg-rail-settings')||'{}');selectedRouteId=saved.routeId||selectedRouteId;selectedRemoteId=saved.remoteId||selectedRemoteId;selectedEndpointId=saved.endpointId||selectedEndpointId}catch(error){console.warn('Could not read saved route settings',error)}
     const records=(r)=>Array.isArray(r.data)?r.data:[];
@@ -166,9 +257,79 @@
     let loadInFlight=false;
     async function load(){if(loadInFlight)return;loadInFlight=true;el.status.textContent='Checking live departures...';el.dot.className='status-dot loading';el.refresh.disabled=true;try{if(transitMode==='paris'){await loadParis()}else{await loadBoston()}el.status.textContent=transitMode==='paris'&&parisUsedEstimatedFallback?'Scheduled data only':'Live data connected';el.updated.textContent=`Updated ${new Intl.DateTimeFormat(undefined,{hour:'numeric',minute:'2-digit'}).format(new Date())}`;el.dot.className=transitMode==='paris'&&parisUsedEstimatedFallback?'status-dot scheduled':'status-dot connected'}catch(error){console.error(error);el.inbound.innerHTML=el.outbound.innerHTML='<div class="empty-state">Live data temporarily unavailable</div>';el.status.textContent=`Could not reach ${transitMode==='paris'?'Île-de-France Mobilités':'MBTA'} live data`;el.dot.className='status-dot error';el.updated.textContent=''}finally{loadInFlight=false;el.refresh.disabled=false}}
     async function initialize(){try{if(transitMode==='boston'){routes=records(await mbta('/routes',{'filter[type]':'2'}));if(!routes.length)throw Error('No commuter rail routes found');if(!routes.some((route)=>route.id===selectedRouteId))selectedRouteId=DEFAULT_ROUTE}else if(!routes.some((route)=>route.id===selectedRouteId))selectedRouteId='metro-9';populateLineOptions();await prepareRoute(selectedRouteId,false);updateRouteText();load()}catch(error){console.error(error);updateRouteText();setStatusMessage(`Could not load ${transitMode==='paris'?'Paris':'commuter rail'} lines`,'error');el.inbound.innerHTML=el.outbound.innerHTML='<div class="empty-state">Live data temporarily unavailable</div>'}}
-    el.lineSelector.addEventListener('click',()=>openSettings('line'));el.routeSummary.addEventListener('click',()=>openSettings('stations'));el.endpointSelect.addEventListener('change',()=>{selectedEndpointId=el.endpointSelect.value;selectedRemoteId=el.remoteSelect.value||selectedRemoteId;if(dialogMode==='stations'){populateStationOptions()}else{updateRouteText()}});el.remoteSelect.addEventListener('change',()=>{selectedRemoteId=el.remoteSelect.value;if(dialogMode!=='stations')updateRouteText()});el.form.addEventListener('submit',async(event)=>{event.preventDefault();if(dialogMode==='line'){selectedRouteId=el.lineSelect.value;el.dialog.close();await prepareRoute(selectedRouteId,false)}else{selectedEndpointId=el.endpointSelect.value;selectedRemoteId=el.remoteSelect.value;el.dialog.close()}localStorage.setItem(`${STORAGE_KEY}-${transitMode}`,JSON.stringify({routeId:selectedRouteId,remoteId:selectedRemoteId,endpointId:selectedEndpointId}));updateRouteText();load()});el.cancelSettings.addEventListener('click',()=>el.dialog.close());el.refresh.addEventListener('click',load);initialize();setInterval(load,REFRESH);
+    async function openStatsDialog(){
+      if (!el.statsDialog) return;
+      el.statsBody.innerHTML = '<div class="loading-state">Loading cache diagnostics…</div>';
+      try {
+        const statsUrl = new URL('api/stats', window.location.href.endsWith('/') ? window.location.href : `${window.location.href}/`);
+        const response = await fetch(statsUrl);
+        const payload = await response.json();
+        const rows = payload?.data || {};
+        const clients = Array.isArray(rows.clients) ? rows.clients : [];
+        const transits = Array.isArray(rows.transits) ? rows.transits : [];
+        const clientHtml = clients.length ? clients.map((client) => `
+          <tr>
+            <td>${(client.client || 'anonymous').replace(/\|.*$/, '')}</td>
+            <td>${client.ip || 'private IP suppressed'}</td>
+            <td>${client.user_agent || 'unknown'}</td>
+            <td>${client.requests_last_minute}</td>
+            <td>${client.requests_last_hour}</td>
+            <td>${client.requests_last_day}</td>
+          </tr>
+        `).join('') : '<tr><td colspan="6" class="muted">No client activity recorded.</td></tr>';
+        const transitHtml = transits.length ? transits.map((item) => `
+          <tr>
+            <td>${item.transit || 'unknown'}</td>
+            <td>${item.endpoint || 'n/a'}</td>
+            <td>${item.hits_last_minute || 0}</td>
+            <td>${item.hits_last_hour || 0}</td>
+            <td>${item.hits_last_day || 0}</td>
+            <td>${item.misses_last_minute || 0}</td>
+            <td>${item.misses_last_hour || 0}</td>
+            <td>${item.misses_last_day || 0}</td>
+            <td>${item.refreshes_last_minute || 0}</td>
+            <td>${item.refreshes_last_hour || 0}</td>
+            <td>${item.refreshes_last_day || 0}</td>
+            <td>${item.last_refresh ? new Date(item.last_refresh * 1000).toLocaleString() : 'never'}</td>
+          </tr>
+        `).join('') : '<tr><td colspan="12" class="muted">No transit cache activity recorded.</td></tr>';
+        el.statsBody.innerHTML = `
+          <section class="stats-section">
+            <h3>Overview</h3>
+            <div class="kpi-grid">
+              <div class="kpi"><span class="kpi-label">Generated</span><span class="kpi-value">${rows.generated_at ? new Date(rows.generated_at * 1000).toLocaleString() : 'n/a'}</span></div>
+              <div class="kpi"><span class="kpi-label">Clients</span><span class="kpi-value">${clients.length}</span></div>
+              <div class="kpi"><span class="kpi-label">Transit records</span><span class="kpi-value">${transits.length}</span></div>
+            </div>
+          </section>
+          <section class="stats-section">
+            <h3>Clients</h3>
+            <table class="stats-table">
+              <thead><tr><th>Browser</th><th>IP</th><th>User agent</th><th>1m</th><th>1h</th><th>24h</th></tr></thead>
+              <tbody>${clientHtml}</tbody>
+            </table>
+          </section>
+          <section class="stats-section">
+            <h3>Transit cache activity</h3>
+            <table class="stats-table">
+              <thead><tr><th>Transit</th><th>Endpoint</th><th>Hits 1m</th><th>Hits 1h</th><th>Hits 24h</th><th>Miss 1m</th><th>Miss 1h</th><th>Miss 24h</th><th>Refresh 1m</th><th>Refresh 1h</th><th>Refresh 24h</th><th>Last refresh</th></tr></thead>
+              <tbody>${transitHtml}</tbody>
+            </table>
+          </section>
+        `;
+      } catch (error) {
+        console.error(error);
+        el.statsBody.innerHTML = '<div class="empty-state">Cache diagnostics are temporarily unavailable.</div>';
+      }
+      if (typeof el.statsDialog.showModal === 'function') {
+        el.statsDialog.showModal();
+      } else {
+        el.statsDialog.setAttribute('open', 'open');
+      }
+    }
+    el.lineSelector.addEventListener('click',()=>openSettings('line'));el.routeSummary.addEventListener('click',()=>openSettings('stations'));el.endpointSelect.addEventListener('change',()=>{selectedEndpointId=el.endpointSelect.value;selectedRemoteId=el.remoteSelect.value||selectedRemoteId;if(dialogMode==='stations'){populateStationOptions()}else{updateRouteText()}});el.remoteSelect.addEventListener('change',()=>{selectedRemoteId=el.remoteSelect.value;if(dialogMode!=='stations')updateRouteText()});el.form.addEventListener('submit',async(event)=>{event.preventDefault();if(dialogMode==='line'){selectedRouteId=el.lineSelect.value;el.dialog.close();await prepareRoute(selectedRouteId,false)}else{selectedEndpointId=el.endpointSelect.value;selectedRemoteId=el.remoteSelect.value;el.dialog.close()}localStorage.setItem(`${STORAGE_KEY}-${transitMode}`,JSON.stringify({routeId:selectedRouteId,remoteId:selectedRemoteId,endpointId:selectedEndpointId}));updateRouteText();load()});el.cancelSettings.addEventListener('click',()=>el.dialog.close());el.refresh.addEventListener('click',load);el.providerFooter.addEventListener('click',openStatsDialog);el.statsClose.addEventListener('click',()=>{if(typeof el.statsDialog.close==='function'){el.statsDialog.close();}else{el.statsDialog.removeAttribute('open');}});initialize();setInterval(load,REFRESH);
       function switchTransitMode(nextMode){const url=new URL(location.href);url.searchParams.set('transit',nextMode);location.assign(url.toString())}
-      el.providerLabel.addEventListener('click',()=>switchTransitMode(transitMode==='paris'?'boston':'paris'));el.lineSelector.addEventListener('click',()=>openSettings('line'));el.routeSummary.addEventListener('click',()=>openSettings('stations'));el.endpointSelect.addEventListener('change',()=>{selectedEndpointId=el.endpointSelect.value;selectedRemoteId=el.remoteSelect.value||selectedRemoteId;if(dialogMode==='stations'){populateStationOptions()}else{updateRouteText()}});el.remoteSelect.addEventListener('change',()=>{selectedRemoteId=el.remoteSelect.value;if(dialogMode!=='stations')updateRouteText()});el.form.addEventListener('submit',async(event)=>{event.preventDefault();if(dialogMode==='line'){selectedRouteId=el.lineSelect.value;el.dialog.close();await prepareRoute(selectedRouteId,false)}else{selectedEndpointId=el.endpointSelect.value;selectedRemoteId=el.remoteSelect.value;el.dialog.close()}localStorage.setItem(`${STORAGE_KEY}-${transitMode}`,JSON.stringify({routeId:selectedRouteId,remoteId:selectedRemoteId,endpointId:selectedEndpointId}));updateRouteText();load()});el.cancelSettings.addEventListener('click',()=>el.dialog.close());el.refresh.addEventListener('click',load);initialize();setInterval(load,REFRESH);
+      el.providerLabel.addEventListener('click',()=>switchTransitMode(transitMode==='paris'?'boston':'paris'));el.lineSelector.addEventListener('click',()=>openSettings('line'));el.routeSummary.addEventListener('click',()=>openSettings('stations'));el.endpointSelect.addEventListener('change',()=>{selectedEndpointId=el.endpointSelect.value;selectedRemoteId=el.remoteSelect.value||selectedRemoteId;if(dialogMode==='stations'){populateStationOptions()}else{updateRouteText()}});el.remoteSelect.addEventListener('change',()=>{selectedRemoteId=el.remoteSelect.value;if(dialogMode!=='stations')updateRouteText()});el.form.addEventListener('submit',async(event)=>{event.preventDefault();if(dialogMode==='line'){selectedRouteId=el.lineSelect.value;el.dialog.close();await prepareRoute(selectedRouteId,false)}else{selectedEndpointId=el.endpointSelect.value;selectedRemoteId=el.remoteSelect.value;el.dialog.close()}localStorage.setItem(`${STORAGE_KEY}-${transitMode}`,JSON.stringify({routeId:selectedRouteId,remoteId:selectedRemoteId,endpointId:selectedEndpointId}));updateRouteText();load()});el.cancelSettings.addEventListener('click',()=>el.dialog.close());el.refresh.addEventListener('click',load);el.providerFooter.addEventListener('click',openStatsDialog);el.statsClose.addEventListener('click',()=>{if(typeof el.statsDialog.close==='function'){el.statsDialog.close();}else{el.statsDialog.removeAttribute('open');}});initialize();setInterval(load,REFRESH);
   </script>
 </body>
 </html>

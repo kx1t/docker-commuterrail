@@ -5,12 +5,15 @@ services:
     restart: unless-stopped
     environment:
       PORT: "80"
+      DATA_DIR: "/data"
       CACHE_TTL_SECONDS: "60"
       HTTP_WORKERS: "10"
       PRIM_API_KEY: "${PRIM_API_KEY}"
       MBTA_API_KEY: "${MBTA_API_KEY}"
     ports:
-      - "8000:80"
+      - "8080:80"
+    volumes:
+      - ./commuterrail:/data
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=64m
       - /run:rw,noexec,nosuid,size=32m

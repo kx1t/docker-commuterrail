@@ -6,6 +6,7 @@ import os
 import socket
 import threading
 import time
+from ipaddress import ip_address
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -26,6 +27,98 @@ STATIC_ROOT = Path('/app')
 cache_lock = threading.RLock()
 cache_store = {}
 transit_last_requested = {}
+cache_stats = {'clients': {}, 'transits': {}}
+DATA_DIR = Path(os.getenv('DATA_DIR', '/data'))
+STATS_FILE = DATA_DIR / 'cache_stats.json'
+
+
+def ensure_stats_path():
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+
+
+def sanitize_private_ip(raw_ip: str | None) -> tuple[str | None, bool]:
+    candidate = (raw_ip or '').strip().split(',')[0].strip()
+    if not candidate or candidate in ('unknown', '-', 'None', 'null'):
+        return None, True
+    try:
+        parsed = ip_address(candidate)
+    except ValueError:
+        return candidate, False
+    private = parsed.is_private or parsed.is_loopback or parsed.is_link_local or parsed.is_reserved
+    if private:
+        return None, True
+    return str(parsed), False
+
+
+def record_stats_event(event_type: str, transit: str, endpoint: str, query: dict | None = None, client_ip: str | None = None, user_agent: str | None = None):
+    ensure_stats_path()
+    if not transit:
+        return
+    now = current_timestamp()
+    with cache_lock:
+        entry_key = read_cache_key(transit, endpoint, query or {})
+        transit_bucket = cache_stats.setdefault('transits', {}).setdefault(normalize_key(transit), {})
+        entry = transit_bucket.setdefault(entry_key, {
+            'endpoint': endpoint,
+            'query': query or {},
+            'hits': [],
+            'misses': [],
+            'refreshes': [],
+            'requests': [],
+            'last_access': None,
+            'last_hit': None,
+            'last_miss': None,
+            'last_refresh': None,
+        })
+        entry['endpoint'] = endpoint
+        entry['query'] = query or {}
+        entry['requests'].append(now)
+        entry['last_access'] = now
+        if event_type == 'hit':
+            entry['hits'].append(now)
+            entry['last_hit'] = now
+        elif event_type == 'miss':
+            entry['misses'].append(now)
+            entry['last_miss'] = now
+        elif event_type == 'refresh':
+            entry['refreshes'].append(now)
+            entry['last_refresh'] = now
+        cutoff = now - 86400
+        for key in ('hits', 'misses', 'refreshes', 'requests'):
+            entry[key] = [ts for ts in (entry.get(key) or []) if float(ts) >= cutoff]
+        client_key = 'anonymous'
+        if client_ip or user_agent:
+            client_key = f"{(client_ip or 'unknown')[:64]}|{(user_agent or 'unknown')[:128]}"
+        if client_ip or user_agent:
+            client_bucket = cache_stats.setdefault('clients', {}).setdefault(client_key, {
+                'first_seen': now,
+                'last_seen': now,
+                'requests': [],
+                'ip': None,
+                'user_agent': user_agent or 'unknown',
+                'internal_ip': True,
+            })
+            client_bucket['last_seen'] = now
+            client_bucket['requests'].append(now)
+            client_bucket['user_agent'] = user_agent or client_bucket.get('user_agent', 'unknown')
+            safe_ip, internal = sanitize_private_ip(client_ip)
+            if safe_ip:
+                client_bucket['ip'] = safe_ip
+                client_bucket['internal_ip'] = False
+            else:
+                client_bucket['ip'] = None
+                client_bucket['internal_ip'] = True
+            if client_bucket.get('first_seen') is None:
+                client_bucket['first_seen'] = now
+            cutoff = now - 86400
+            client_bucket['requests'] = [ts for ts in (client_bucket.get('requests') or []) if float(ts) >= cutoff]
+        try:
+            STATS_FILE.write_text(json.dumps(cache_stats, sort_keys=True))
+        except OSError:
+            pass
 
 
 class ConcurrencyLimitedHTTPServer(ThreadingHTTPServer):
@@ -84,6 +177,29 @@ def transit_requested_recently(transit: str) -> bool:
         return (current_timestamp() - last_time) <= CACHE_TTL_SECONDS
 
 
+def count_recent(events, seconds: int):
+    if not events:
+        return 0
+    cutoff = current_timestamp() - seconds
+    return sum(1 for ts in events if float(ts) >= cutoff)
+
+
+def load_cache_stats():
+    ensure_stats_path()
+    if not STATS_FILE.exists():
+        return {'clients': {}, 'transits': {}}
+    try:
+        loaded = json.loads(STATS_FILE.read_text())
+        if isinstance(loaded, dict):
+            return loaded
+    except (OSError, ValueError):
+        pass
+    return {'clients': {}, 'transits': {}}
+
+
+cache_stats.update(load_cache_stats())
+
+
 def http_error_text(exc):
     status = getattr(exc, 'code', None) or getattr(exc, 'status', None)
     reason = getattr(exc, 'reason', None) or str(exc)
@@ -131,15 +247,17 @@ def fetch_upstream(transit: str, endpoint: str, query: dict | None = None):
         return json.loads(payload.decode('utf-8'))
 
 
-def fetch_and_cache(transit: str, endpoint: str, query: dict | None = None):
+def fetch_and_cache(transit: str, endpoint: str, query: dict | None = None, client_ip: str | None = None, user_agent: str | None = None):
     data = fetch_upstream(transit, endpoint, query)
     key = read_cache_key(transit, endpoint, query)
+    fetched_at = current_timestamp()
     with cache_lock:
         cache_store[key] = {
             'data': data,
-            'expires_at': current_timestamp() + CACHE_TTL_SECONDS,
-            'fetched_at': current_timestamp(),
+            'expires_at': fetched_at + CACHE_TTL_SECONDS,
+            'fetched_at': fetched_at,
         }
+    record_stats_event('refresh', transit, endpoint, query, client_ip=client_ip, user_agent=user_agent)
     return cache_store[key]
 
 
@@ -152,6 +270,52 @@ def get_cached_payload(transit: str, endpoint: str, query: dict | None = None):
         if cached:
             return cached
     return None
+
+
+def build_stats_payload():
+    now = current_timestamp()
+    snapshot = {'generated_at': now, 'clients': [], 'transits': []}
+    with cache_lock:
+        for client_key, client in sorted((cache_stats.get('clients') or {}).items(), key=lambda item: item[1].get('last_seen', 0), reverse=True):
+            ip_value = client.get('ip')
+            if not ip_value and client.get('internal_ip'):
+                ip_value = 'private IP suppressed'
+            snapshot['clients'].append({
+                'client': client_key,
+                'ip': ip_value,
+                'internal_ip': bool(client.get('internal_ip')),
+                'user_agent': client.get('user_agent') or 'unknown',
+                'requests_last_minute': count_recent(client.get('requests') or [], 60),
+                'requests_last_hour': count_recent(client.get('requests') or [], 3600),
+                'requests_last_day': count_recent(client.get('requests') or [], 86400),
+                'first_seen': client.get('first_seen'),
+                'last_seen': client.get('last_seen'),
+            })
+        for transit_name, transit_bucket in sorted((cache_stats.get('transits') or {}).items()):
+            for key, entry in sorted((transit_bucket or {}).items(), key=lambda item: item[1].get('last_access') or 0, reverse=True):
+                snapshot['transits'].append({
+                    'transit': transit_name,
+                    'cache_key': key,
+                    'endpoint': entry.get('endpoint'),
+                    'query': entry.get('query') or {},
+                    'last_access': entry.get('last_access'),
+                    'last_hit': entry.get('last_hit'),
+                    'last_miss': entry.get('last_miss'),
+                    'last_refresh': entry.get('last_refresh'),
+                    'hits_last_minute': count_recent(entry.get('hits') or [], 60),
+                    'hits_last_hour': count_recent(entry.get('hits') or [], 3600),
+                    'hits_last_day': count_recent(entry.get('hits') or [], 86400),
+                    'misses_last_minute': count_recent(entry.get('misses') or [], 60),
+                    'misses_last_hour': count_recent(entry.get('misses') or [], 3600),
+                    'misses_last_day': count_recent(entry.get('misses') or [], 86400),
+                    'refreshes_last_minute': count_recent(entry.get('refreshes') or [], 60),
+                    'refreshes_last_hour': count_recent(entry.get('refreshes') or [], 3600),
+                    'refreshes_last_day': count_recent(entry.get('refreshes') or [], 86400),
+                    'requests_last_minute': count_recent(entry.get('requests') or [], 60),
+                    'requests_last_hour': count_recent(entry.get('requests') or [], 3600),
+                    'requests_last_day': count_recent(entry.get('requests') or [], 86400),
+                })
+    return snapshot
 
 
 def resolve_endpoint(path: str, transit: str):
@@ -220,12 +384,27 @@ class TransitCacheHandler(BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps({'status': 'ok', 'transit': transit}).encode())
                 return
 
+            if request_path in ('/api/stats', '/stats'):
+                payload = build_stats_payload()
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'ok', 'data': payload}).encode('utf-8'))
+                return
+
             if request_path in ('/api/cache', '/cache') or request_path.startswith('/api/cache/'):
                 try:
+                    client_ip = (self.headers.get('X-Forwarded-For') or self.headers.get('X-Real-IP') or self.client_address[0] if hasattr(self, 'client_address') else None)
+                    client_ip = client_ip.split(',')[0].strip() if isinstance(client_ip, str) and client_ip else client_ip
+                    user_agent = self.headers.get('User-Agent')
                     cached = get_cached_payload(transit, endpoint, request_query)
                     should_refresh = cached is None or cached.get('expires_at', 0) <= current_timestamp()
+                    if cached is not None:
+                        record_stats_event('hit', transit, endpoint, request_query, client_ip=client_ip, user_agent=user_agent)
+                    else:
+                        record_stats_event('miss', transit, endpoint, request_query, client_ip=client_ip, user_agent=user_agent)
                     if should_refresh and transit_requested_recently(transit):
-                        cached = fetch_and_cache(transit, endpoint, request_query)
+                        cached = fetch_and_cache(transit, endpoint, request_query, client_ip=client_ip, user_agent=user_agent)
                     if cached is not None:
                         stale = cached.get('expires_at', 0) <= current_timestamp()
                         body = build_json_response(

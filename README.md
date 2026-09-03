@@ -22,19 +22,26 @@ services:
     restart: unless-stopped
     environment:
       PORT: "80"
+      DATA_DIR: "/data"
       CACHE_TTL_SECONDS: "60"
       HTTP_WORKERS: "10"
       PRIM_API_KEY: "${PRIM_API_KEY}"
       MBTA_API_KEY: "${MBTA_API_KEY}"
     ports:
-      - "80:80"
+      - "8080:80"
+    volumes:
+      - ./commuterrail:/data
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=64m
       - /run:rw,noexec,nosuid,size=32m
     read_only: true
 ```
 
-This exposes port 80 on the host and keeps all non-persistent runtime files in tmpfs, matching the requirement that cached values and ephemeral runtime directories should not be on disk.
+This exposes port 80 inside the container, leaves the host port flexible via Docker port mapping, and persists the cache statistics journal to a local `./commuterrail` directory on disk so it survives container restarts. The runtime still keeps all non-persistent runtime files in tmpfs, matching the requirement that cached values and ephemeral runtime directories should not be on disk.
+
+### Cache statistics and diagnostics
+
+The app exposes a mobile-friendly diagnostics view via the footer link `Data from ...`. It reads the latest cache and client statistics from the `/api/stats` endpoint and shows per-transit cache activity, recent hit/miss/refresh counts over the last minute, hour, and previous 24 hours, plus observed client browser IDs and sanitized source IP provenance with private-range addresses suppressed.
 
 ### Reverse proxy layout
 
