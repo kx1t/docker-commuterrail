@@ -177,6 +177,17 @@ def transit_requested_recently(transit: str) -> bool:
         return (current_timestamp() - last_time) <= CACHE_TTL_SECONDS
 
 
+def normalize_api_endpoint(value: str | None) -> str:
+    candidate = (value or '').strip()
+    if not candidate:
+        return 'unknown'
+    parsed = urlparse(candidate)
+    path = parsed.path or candidate
+    if not path.startswith('/'):
+        path = '/' + path
+    return path or '/'
+
+
 def count_recent(events, seconds: int):
     if not events:
         return 0
@@ -295,7 +306,7 @@ def build_stats_payload():
         by_api_endpoint = {}
         for transit_name, transit_bucket in sorted((cache_stats.get('transits') or {}).items()):
             for key, entry in (transit_bucket or {}).items():
-                endpoint = entry.get('endpoint') or 'unknown'
+                endpoint = normalize_api_endpoint(entry.get('endpoint'))
                 bucket = by_api_endpoint.setdefault((transit_name, endpoint), {
                     'transit': transit_name,
                     'endpoint': endpoint,
@@ -309,7 +320,6 @@ def build_stats_payload():
                     'refreshes': [],
                     'requests': [],
                 })
-                bucket['query'] = {}
                 for field in ('hits', 'misses', 'refreshes', 'requests'):
                     bucket[field].extend(entry.get(field) or [])
                 for field in ('last_access', 'last_hit', 'last_miss', 'last_refresh'):
