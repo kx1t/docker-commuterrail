@@ -16,7 +16,7 @@ PRIM_API = 'https://prim.iledefrance-mobilites.fr/marketplace'
 MBTA_API = 'https://api-v3.mbta.com'
 IDFM_DATA_API = 'https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/arrets-lignes/records'
 CACHE_TTL_SECONDS = int(os.getenv('CACHE_TTL_SECONDS', '60'))
-PORT = int(os.getenv('PORT', '8000'))
+PORT = int(os.getenv('PORT', '80'))
 PRIM_API_KEY = os.getenv('PRIM_API_KEY', '')
 MBTA_API_KEY = os.getenv('MBTA_API_KEY', '') or os.getenv('BOSTON_API_KEY', '') or os.getenv('API_KEY', '')
 MAX_THREADS = int(os.getenv('HTTP_WORKERS', '10'))
@@ -161,6 +161,15 @@ def resolve_endpoint(path: str, transit: str):
     return path.lstrip('/')
 
 
+def strip_proxy_prefix(path: str) -> str:
+    normalized = (path or '/').strip()
+    if not normalized.startswith('/'):
+        normalized = '/' + normalized
+    if normalized.startswith('/commuterrail'):
+        normalized = normalized[len('/commuterrail'):] or '/'
+    return normalized or '/'
+
+
 def build_json_response(transit: str, endpoint: str, payload=None, status='ok', message=None, stale=False):
     response = {
         'transit': transit,
@@ -197,20 +206,21 @@ class TransitCacheHandler(BaseHTTPRequestHandler):
         self.server.get_semaphore().acquire()
         try:
             parsed = urlparse(self.path)
+            request_path = strip_proxy_prefix(parsed.path)
             query = parse_qs(parsed.query)
             transit = (query.get('transit', ['paris'])[0] or 'paris').lower()
-            endpoint = query.get('path', [resolve_endpoint(parsed.path, transit)])[0]
+            endpoint = query.get('path', [resolve_endpoint(request_path, transit)])[0]
             request_query = parse_json_query(query.get('query', ['{}'])[0])
             mark_transit_requested(transit)
 
-            if parsed.path in ('/healthz', '/health'):
+            if request_path in ('/healthz', '/health'):
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
                 self.wfile.write(json.dumps({'status': 'ok', 'transit': transit}).encode())
                 return
 
-            if parsed.path in ('/api/cache', '/cache') or parsed.path.startswith('/api/cache/'):
+            if request_path in ('/api/cache', '/cache') or request_path.startswith('/api/cache/'):
                 try:
                     cached = get_cached_payload(transit, endpoint, request_query)
                     should_refresh = cached is None or cached.get('expires_at', 0) <= current_timestamp()
@@ -265,12 +275,12 @@ class TransitCacheHandler(BaseHTTPRequestHandler):
                     self.wfile.write(json.dumps(body).encode('utf-8'))
                     return
 
-            if parsed.path in ('/', '/index.html', '/commuterrail', '/commuterrail/') or parsed.path.startswith('/commuterrail'):
+            if request_path in ('/', '/index.html'):
                 serve_static_file(self, '/index.html')
                 return
 
-            if parsed.path.startswith('/'):
-                serve_static_file(self, parsed.path)
+            if request_path.startswith('/'):
+                serve_static_file(self, request_path)
                 return
 
             self.send_response(404)

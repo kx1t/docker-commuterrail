@@ -2,7 +2,7 @@ FROM debian:trixie-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PORT=8000 \
+    PORT=80 \
     CACHE_TTL_SECONDS=60 \
     HTTP_WORKERS=10 \
     PRIM_API_KEY=""
@@ -18,9 +18,8 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 COPY app /app/app
 COPY index.html /app/index.html
-COPY runtime-config.php /app/runtime-config.php
 COPY README.md /app/README.md
 
-EXPOSE 8000
+EXPOSE 80
 
 CMD ["python3", "/app/app/server.py"]

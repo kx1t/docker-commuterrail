@@ -110,7 +110,7 @@
     </form>
   </dialog>
   <script>
-    const CACHE_API='/api/cache', DEFAULT_ROUTE='CR-Fitchburg', DEFAULT_REMOTE='place-FR-0064', DEFAULT_ENDPOINT='place-north', REFRESH=120000, STORAGE_KEY='transit-settings';
+    const CACHE_API='api/cache', DEFAULT_ROUTE='CR-Fitchburg', DEFAULT_REMOTE='place-FR-0064', DEFAULT_ENDPOINT='place-north', REFRESH=120000, STORAGE_KEY='transit-settings';
     function setStatusMessage(text, tone='info'){
       if (!text) return;
       el.status.textContent = text;
@@ -132,7 +132,7 @@
     const time=(r)=>r.attributes?.departure_time||r.attributes?.arrival_time;
     const displayTime=(v)=>new Intl.DateTimeFormat(undefined,{hour:'numeric',minute:'2-digit'}).format(new Date(v));
     const windowParams=()=>{const n=new Date(),later=new Date(n.getTime()+18*3600000);return{min_time:n.toISOString(),max_time:later.toISOString()}};
-    const cacheRequest=async(transit,endpoint,query={})=>{const params=new URLSearchParams({transit, path:endpoint, query:JSON.stringify(query)});const response=await fetch(`${CACHE_API}?${params.toString()}`);const payload=await response.json().catch(()=>({}));if(payload?.status==='warning'&&payload?.message){setStatusMessage(payload.message,'warning');return payload.data||{}}if(payload?.status==='error'){const message=payload.message||'Error: transit data is unavailable.';setStatusMessage(message,'error');throw Error(message)}if(!response.ok){const message=`Cache API returned ${response.status}`;setStatusMessage(message,'error');throw Error(message)}return payload.data||{}}
+    const cacheRequest=async(transit,endpoint,query={})=>{const params=new URLSearchParams({transit, path:endpoint, query:JSON.stringify(query)});const baseUrl = window.location.pathname.endsWith('/') ? window.location.href : `${window.location.href}/`;const response=await fetch(new URL(`${CACHE_API}?${params.toString()}`, baseUrl));const payload=await response.json().catch(()=>({}));if(payload?.status==='warning'&&payload?.message){setStatusMessage(payload.message,'warning');return payload.data||{}}if(payload?.status==='error'){const message=payload.message||'Error: transit data is unavailable.';setStatusMessage(message,'error');throw Error(message)}if(!response.ok){const message=`Cache API returned ${response.status}`;setStatusMessage(message,'error');throw Error(message)}return payload.data||{}}
     async function mbta(path,query){return cacheRequest('boston',path,query||{})}
     const sleep=(ms)=>new Promise((resolve)=>setTimeout(resolve,ms));
     async function prim(path,query={},attempt=0){return cacheRequest('paris',path,query||{})}
