@@ -7,13 +7,16 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, parse_qsl, urlencode, urlparse
 from urllib.request import Request, urlopen
 
 PRIM_API = 'https://prim.iledefrance-mobilites.fr/marketplace'
+MBTA_API = 'https://api-v3.mbta.com'
+IDFM_DATA_API = 'https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/arrets-lignes/records'
 CACHE_TTL_SECONDS = int(os.getenv('CACHE_TTL_SECONDS', '60'))
 PORT = int(os.getenv('PORT', '8000'))
 PRIM_API_KEY = os.getenv('PRIM_API_KEY', '')
+MBTA_API_KEY = os.getenv('MBTA_API_KEY', '') or os.getenv('BOSTON_API_KEY', '') or os.getenv('API_KEY', '')
 MAX_THREADS = int(os.getenv('HTTP_WORKERS', '10'))
 DEFAULT_PARIS_PATH = 'estimated-timetable?LineRef=STIF:Line::C01379:'
 STATIC_ROOT = Path('/app')
@@ -39,32 +42,59 @@ def current_timestamp() -> float:
     return time.time()
 
 
-def make_headers() -> dict:
-    headers = {}
-    if PRIM_API_KEY:
-        headers['apikey'] = PRIM_API_KEY
-    return headers
+def parse_json_query(raw):
+    if raw is None or raw == '':
+        return {}
+    try:
+        value = json.loads(raw)
+        return value if isinstance(value, dict) else {}
+    except Exception:
+        return {}
 
 
-def read_cache_key(transit: str, endpoint: str) -> str:
-    return f"{normalize_key(transit)}::{normalize_key(endpoint)}"
+def make_headers(transit: str) -> dict:
+    if transit.lower() == 'paris':
+        return {'apikey': PRIM_API_KEY} if PRIM_API_KEY else {}
+    if transit.lower() == 'boston':
+        return {'x-api-key': MBTA_API_KEY} if MBTA_API_KEY else {}
+    return {}
 
 
-def fetch_pri_payload(endpoint: str):
+def read_cache_key(transit: str, endpoint: str, query: dict | None = None) -> str:
+    return f"{normalize_key(transit)}::{normalize_key(endpoint)}::{json.dumps(query or {}, sort_keys=True)}"
+
+
+def upstream_url_for(transit: str, endpoint: str, query: dict | None = None):
+    base = PRIM_API if transit.lower() == 'paris' else MBTA_API
+    if transit.lower() == 'paris':
+        if endpoint in ('/stops', 'stops'):
+            line = (query or {}).get('route', '')
+            line_number = str(line).split('-')[-1]
+            return f"{IDFM_DATA_API}?{urlencode({'where': f'route_long_name=\"{line_number}\"', 'limit': '100'})}"
+        if endpoint.startswith('/stop-monitoring') or endpoint.startswith('stop-monitoring'):
+            return f"{base}/{endpoint.lstrip('/')}"
+        return f"{base}/{endpoint.lstrip('/')}"
+    path = endpoint if endpoint.startswith('/') else f'/{endpoint}'
+    params = urlencode(query or {}, doseq=True)
+    suffix = f'?{params}' if params else ''
+    return f"{base}{path}{suffix}"
+
+
+def fetch_upstream(transit: str, endpoint: str, query: dict | None = None):
     if not endpoint:
-        raise ValueError('empty PRIM endpoint')
-    url = f"{PRIM_API}/{endpoint.lstrip('/')}"
-    request = Request(url, headers=make_headers())
+        raise ValueError('empty API endpoint')
+    url = upstream_url_for(transit, endpoint, query)
+    request = Request(url, headers=make_headers(transit))
     with urlopen(request, timeout=20) as response:
         payload = response.read()
         if not payload:
-            raise RuntimeError('Empty PRIM response')
+            raise RuntimeError('Empty upstream response')
         return json.loads(payload.decode('utf-8'))
 
 
-def fetch_and_cache(transit: str, endpoint: str):
-    data = fetch_pri_payload(endpoint)
-    key = read_cache_key(transit, endpoint)
+def fetch_and_cache(transit: str, endpoint: str, query: dict | None = None):
+    data = fetch_upstream(transit, endpoint, query)
+    key = read_cache_key(transit, endpoint, query)
     with cache_lock:
         cache_store[key] = {
             'data': data,
@@ -74,8 +104,8 @@ def fetch_and_cache(transit: str, endpoint: str):
     return cache_store[key]
 
 
-def get_cached_payload(transit: str, endpoint: str):
-    key = read_cache_key(transit, endpoint)
+def get_cached_payload(transit: str, endpoint: str, query: dict | None = None):
+    key = read_cache_key(transit, endpoint, query)
     with cache_lock:
         cached = cache_store.get(key)
         if cached and cached['expires_at'] > current_timestamp():
@@ -88,7 +118,7 @@ def get_cached_payload(transit: str, endpoint: str):
 def resolve_endpoint(path: str, transit: str):
     path = (path or '').strip()
     if not path or path == '/':
-        return DEFAULT_PARIS_PATH if transit.lower() == 'paris' else ''
+        return DEFAULT_PARIS_PATH if transit.lower() == 'paris' else '/routes'
     return path.lstrip('/')
 
 
@@ -109,12 +139,12 @@ def build_json_response(transit: str, endpoint: str, payload=None, error=None, s
 def refresh_known_endpoints():
     defaults = {
         'paris': [DEFAULT_PARIS_PATH],
-        'boston': [],
+        'boston': ['/routes'],
     }
     for transit, endpoints in defaults.items():
         for endpoint in endpoints:
             try:
-                fetch_and_cache(transit, endpoint)
+                fetch_and_cache(transit, endpoint, {'filter[type]': '2'} if transit.lower() == 'boston' else {})
             except Exception:
                 pass
 
@@ -154,6 +184,7 @@ class TransitCacheHandler(BaseHTTPRequestHandler):
             query = parse_qs(parsed.query)
             transit = (query.get('transit', ['paris'])[0] or 'paris').lower()
             endpoint = query.get('path', [resolve_endpoint(parsed.path, transit)])[0]
+            request_query = parse_json_query(query.get('query', ['{}'])[0])
 
             if parsed.path in ('/healthz', '/health'):
                 self.send_response(200)
@@ -164,9 +195,9 @@ class TransitCacheHandler(BaseHTTPRequestHandler):
 
             if parsed.path in ('/api/cache', '/cache') or parsed.path.startswith('/api/cache/'):
                 try:
-                    cached = get_cached_payload(transit, endpoint)
+                    cached = get_cached_payload(transit, endpoint, request_query)
                     if cached is None:
-                        cached = fetch_and_cache(transit, endpoint)
+                        cached = fetch_and_cache(transit, endpoint, request_query)
                     self.send_response(200)
                     self.send_header('Cache-Control', 'no-store')
                     self.send_header('Content-Type', 'application/json')
@@ -174,7 +205,7 @@ class TransitCacheHandler(BaseHTTPRequestHandler):
                     body = build_json_response(transit, endpoint, payload=cached['data'], stale=(cached.get('expires_at', 0) <= current_timestamp()))
                     self.wfile.write(json.dumps(body).encode('utf-8'))
                 except Exception as exc:
-                    stale = get_cached_payload(transit, endpoint)
+                    stale = get_cached_payload(transit, endpoint, request_query)
                     if stale:
                         body = build_json_response(transit, endpoint, payload=stale['data'], stale=True)
                     else:
