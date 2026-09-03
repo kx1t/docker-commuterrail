@@ -11,8 +11,14 @@ permissions:
   packages: write
 
 jobs:
-  build-and-push:
+  build-platform:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - linux/amd64
+          - linux/arm64
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -30,14 +36,35 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push multi-arch image
+      - name: Build and push ${{ matrix.platform }} image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.platform }}
           push: true
           provenance: false
+          sbom: false
+          cache-from: type=gha,scope=build-${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=build-${{ matrix.platform }}
           tags: |
-            ghcr.io/kx1t/docker-commuterrail:latest
-            ghcr.io/kx1t/docker-commuterrail:${{ github.sha }}
+            ghcr.io/kx1t/docker-commuterrail:${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}-${{ github.sha }}
+
+  create-manifest:
+    needs: build-platform
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Assemble multi-arch manifest
+        run: |
+          docker buildx imagetools create \
+            --tag ghcr.io/kx1t/docker-commuterrail:latest \
+            --tag ghcr.io/kx1t/docker-commuterrail:${{ github.sha }} \
+            ghcr.io/kx1t/docker-commuterrail:amd64-${{ github.sha }} \
+            ghcr.io/kx1t/docker-commuterrail:arm64-${{ github.sha }}

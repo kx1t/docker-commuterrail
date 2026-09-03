@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import datetime
 import json
 import mimetypes
 import os
@@ -7,7 +8,8 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, parse_qsl, urlencode, urlparse
+from urllib.error import HTTPError, URLError
+from urllib.parse import parse_qs, urlencode, urlparse
 from urllib.request import Request, urlopen
 
 PRIM_API = 'https://prim.iledefrance-mobilites.fr/marketplace'
@@ -23,6 +25,7 @@ STATIC_ROOT = Path('/app')
 
 cache_lock = threading.RLock()
 cache_store = {}
+transit_last_requested = {}
 
 
 class ConcurrencyLimitedHTTPServer(ThreadingHTTPServer):
@@ -40,6 +43,10 @@ def normalize_key(value: str) -> str:
 
 def current_timestamp() -> float:
     return time.time()
+
+
+def format_cache_time(timestamp: float) -> str:
+    return datetime.datetime.fromtimestamp(timestamp, tz=datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
 
 
 def parse_json_query(raw):
@@ -62,6 +69,38 @@ def make_headers(transit: str) -> dict:
 
 def read_cache_key(transit: str, endpoint: str, query: dict | None = None) -> str:
     return f"{normalize_key(transit)}::{normalize_key(endpoint)}::{json.dumps(query or {}, sort_keys=True)}"
+
+
+def mark_transit_requested(transit: str):
+    with cache_lock:
+        transit_last_requested[normalize_key(transit)] = current_timestamp()
+
+
+def transit_requested_recently(transit: str) -> bool:
+    with cache_lock:
+        last_time = transit_last_requested.get(normalize_key(transit))
+        if last_time is None:
+            return False
+        return (current_timestamp() - last_time) <= CACHE_TTL_SECONDS
+
+
+def http_error_text(exc):
+    status = getattr(exc, 'code', None) or getattr(exc, 'status', None)
+    reason = getattr(exc, 'reason', None) or str(exc)
+    if status is not None:
+        return f'Server error {status}: {reason}'
+    if reason and reason != 'None':
+        return f'Server error: {reason}'
+    return 'Server error'
+
+
+def warning_for_stale_cache(stale_entry, exc):
+    updated_at = stale_entry.get('fetched_at') or stale_entry.get('expires_at') or current_timestamp()
+    return f"Warning: Transit data was last updated on {format_cache_time(updated_at)}. {http_error_text(exc)}"
+
+
+def error_for_missing_cache(exc):
+    return f"Error: transit data cannot be retrieved. {http_error_text(exc)}"
 
 
 def upstream_url_for(transit: str, endpoint: str, query: dict | None = None):
@@ -122,40 +161,17 @@ def resolve_endpoint(path: str, transit: str):
     return path.lstrip('/')
 
 
-def build_json_response(transit: str, endpoint: str, payload=None, error=None, stale=False):
-    payload = payload or {}
+def build_json_response(transit: str, endpoint: str, payload=None, status='ok', message=None, stale=False):
     response = {
         'transit': transit,
         'endpoint': endpoint,
         'cached': not stale,
-        'status': 'error' if error else 'ok',
-        'data': payload,
+        'status': status,
+        'data': payload or {},
     }
-    if error:
-        response['error'] = error
+    if message:
+        response['message'] = message
     return response
-
-
-def refresh_known_endpoints():
-    defaults = {
-        'paris': [DEFAULT_PARIS_PATH],
-        'boston': ['/routes'],
-    }
-    for transit, endpoints in defaults.items():
-        for endpoint in endpoints:
-            try:
-                fetch_and_cache(transit, endpoint, {'filter[type]': '2'} if transit.lower() == 'boston' else {})
-            except Exception:
-                pass
-
-
-def refresh_loop():
-    while True:
-        try:
-            refresh_known_endpoints()
-        except Exception:
-            pass
-        time.sleep(CACHE_TTL_SECONDS)
 
 
 def serve_static_file(self, relative_path: str):
@@ -185,6 +201,7 @@ class TransitCacheHandler(BaseHTTPRequestHandler):
             transit = (query.get('transit', ['paris'])[0] or 'paris').lower()
             endpoint = query.get('path', [resolve_endpoint(parsed.path, transit)])[0]
             request_query = parse_json_query(query.get('query', ['{}'])[0])
+            mark_transit_requested(transit)
 
             if parsed.path in ('/healthz', '/health'):
                 self.send_response(200)
@@ -196,25 +213,57 @@ class TransitCacheHandler(BaseHTTPRequestHandler):
             if parsed.path in ('/api/cache', '/cache') or parsed.path.startswith('/api/cache/'):
                 try:
                     cached = get_cached_payload(transit, endpoint, request_query)
-                    if cached is None:
+                    should_refresh = cached is None or cached.get('expires_at', 0) <= current_timestamp()
+                    if should_refresh and transit_requested_recently(transit):
                         cached = fetch_and_cache(transit, endpoint, request_query)
-                    self.send_response(200)
-                    self.send_header('Cache-Control', 'no-store')
+                    if cached is not None:
+                        stale = cached.get('expires_at', 0) <= current_timestamp()
+                        body = build_json_response(
+                            transit,
+                            endpoint,
+                            payload=cached['data'],
+                            status='warning' if stale else 'ok',
+                            message=None if not stale else f"Warning: Transit data was last updated on {format_cache_time(cached.get('fetched_at') or cached.get('expires_at') or current_timestamp())}. Data is stale.",
+                            stale=stale,
+                        )
+                        self.send_response(200)
+                        self.send_header('Cache-Control', 'no-store')
+                        self.send_header('Content-Type', 'application/json')
+                        self.end_headers()
+                        self.wfile.write(json.dumps(body).encode('utf-8'))
+                        return
+                    self.send_response(503)
                     self.send_header('Content-Type', 'application/json')
                     self.end_headers()
-                    body = build_json_response(transit, endpoint, payload=cached['data'], stale=(cached.get('expires_at', 0) <= current_timestamp()))
-                    self.wfile.write(json.dumps(body).encode('utf-8'))
+                    self.wfile.write(json.dumps(build_json_response(transit, endpoint, status='error', message='Error: transit data cannot be retrieved. No recent refresh window is available.')).encode('utf-8'))
+                    return
                 except Exception as exc:
                     stale = get_cached_payload(transit, endpoint, request_query)
                     if stale:
-                        body = build_json_response(transit, endpoint, payload=stale['data'], stale=True)
-                    else:
-                        body = build_json_response(transit, endpoint, error=str(exc))
-                    self.send_response(200 if stale else 502)
+                        body = build_json_response(
+                            transit,
+                            endpoint,
+                            payload=stale['data'],
+                            status='warning',
+                            message=warning_for_stale_cache(stale, exc),
+                            stale=True,
+                        )
+                        self.send_response(200)
+                        self.send_header('Content-Type', 'application/json')
+                        self.end_headers()
+                        self.wfile.write(json.dumps(body).encode('utf-8'))
+                        return
+                    body = build_json_response(
+                        transit,
+                        endpoint,
+                        status='error',
+                        message=error_for_missing_cache(exc),
+                    )
+                    self.send_response(503)
                     self.send_header('Content-Type', 'application/json')
                     self.end_headers()
                     self.wfile.write(json.dumps(body).encode('utf-8'))
-                return
+                    return
 
             if parsed.path in ('/', '/index.html', '/commuterrail', '/commuterrail/') or parsed.path.startswith('/commuterrail'):
                 serve_static_file(self, '/index.html')
@@ -234,7 +283,6 @@ class TransitCacheHandler(BaseHTTPRequestHandler):
 
 
 if __name__ == '__main__':
-    threading.Thread(target=refresh_loop, daemon=True).start()
     httpd = ConcurrencyLimitedHTTPServer(('', PORT), TransitCacheHandler, max_workers=MAX_THREADS)
     httpd.daemon_threads = True
     httpd.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

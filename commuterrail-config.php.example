@@ -1,6 +1,0 @@
-<?php
-
-return [
-    'boston_api_key' => 'replace-with-boston-key',
-    'paris_api_key' => 'replace-with-paris-key',
-];

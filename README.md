@@ -1,21 +1,26 @@
 # Fitchburg Line Live Departures
 
-This repository contains the front-end dashboard and a small Dockerized cache service for Paris PRIM data. The cache service runs on a single port and keeps a 60-second in-memory cache so the browser does not call the upstream API directly on every refresh.
+This repository contains the front-end dashboard and a small Dockerized transit cache service for both Paris PRIM and Boston MBTA data. The cache runs on a single port, stores responses in memory, and refreshes data only after a browser request for a specific transit authority within the last 60 seconds. This keeps quota usage low and avoids unnecessary upstream refreshes when no browser is actively using the service.
 
 ## Containerized cache architecture
 
-The page should call the local cache service instead of PRIM directly. The cache service fetches live Paris data once per minute, caches it in memory, and serves that to the browser. This reduces quota consumption and avoids repeated browser requests from causing upstream 429s.
+The page should call the local cache service instead of PRIM or MBTA directly. For each transit authority, the cache keeps per-authority request timing so the app can go stale when no browser is actively asking for that transit data. If a browser request arrives while the cache is missing or stale, the server refreshes it immediately. If the refresh fails, the browser receives a warning or error message instead of silently failing.
 
 ### Runtime env vars
 
-The cache container uses Docker environment variables instead of a JSON file. Set the API key using environment variables such as:
+The cache container uses Docker environment variables instead of a JSON file. Set the upstream keys using environment variables such as:
 
 ```sh
-PRIM_API_KEY=your-prim-key
+PRIM_API_KEY=your-paris-key
+MBTA_API_KEY=your-mbta-key
+# or BOSTON_API_KEY=your-mbta-key
+# or API_KEY=your-mbta-key
 CACHE_TTL_SECONDS=60
 PORT=80
 HTTP_WORKERS=10
 ```
+
+This is the MBTA-side implementation of the caching scheme: the server records the last request time per transit authority, only refreshes when a recent browser request exists, and serves stale data with a warning if refreshing fails.
 
 ### Docker Compose example
 
@@ -30,6 +35,7 @@ services:
       CACHE_TTL_SECONDS: "60"
       HTTP_WORKERS: "10"
       PRIM_API_KEY: "${PRIM_API_KEY}"
+      MBTA_API_KEY: "${MBTA_API_KEY}"
     ports:
       - "80:80"
     tmpfs:
@@ -42,7 +48,7 @@ This exposes port 80 on the host and keeps all non-persistent runtime files in t
 
 ### Reverse proxy layout
 
-The container is designed to sit behind a reverse proxy. The app itself does not need TLS. The web UI should keep the same single-endpoint pattern with a `transit` GET parameter, but instead of talking straight to PRIM it pings the cache service.
+The container is designed to sit behind a reverse proxy. The app itself does not need TLS. The web UI should keep the same single-endpoint pattern with a `transit` GET parameter, but instead of talking straight to upstream APIs it pings the local cache service.
 
 Example browser request:
 
@@ -54,7 +60,15 @@ The reverse proxy can route that to the cache service or to a static frontend th
 
 ## Front-end behavior
 
-The page still supports the single endpoint with `transit` selection. For Paris, the frontend should call the cache service endpoint rather than the upstream PRIM API directly. The cache service maintains a 60-second TTL and serves a response until the next fetch window.
+The page still supports the single endpoint with `transit` selection. For Paris and Boston, the frontend calls the cache endpoint rather than hitting the upstream APIs directly. The cache maintains a 60-second TTL and serves stale data only if the server cannot refresh it after a recent request; the browser then shows an inline warning or error message.
+
+## Error handling contract
+
+The cache server emits browser-visible messages in these cases:
+
+- stale data + refresh fails: `Warning: Transit data was last updated on date/time. Server error ###: message`
+- missing cache + refresh fails: `Error: transit data cannot be retrieved. Server error ###: message`
+- any other errors: a short and descriptive error text
 
 ## Docker build and deployment
 
@@ -64,10 +78,10 @@ The image is intended to be published as a multi-arch image to GHCR on each push
 docker buildx build --platform linux/amd64,linux/arm64 --push -t ghcr.io/kx1t/docker-commuterrail:latest .
 ```
 
-The repo includes a GitHub Action that performs this build automatically.
+The repo includes a GitHub Action that performs this build automatically, with each architecture built in parallel and Docker layer caches shared via GitHub Actions cache.
 
 ## Notes
 
 - No JSON secret file is used. All secret configuration comes from Docker environment variables.
 - Cache values are in-memory only and should live in tmpfs-backed runtime memory.
-- This design keeps the service stateless, simple, and suitable for container deployment behind nginx or another reverse proxy.
+- The service is stateless, simple, and suitable for container deployment behind nginx or another reverse proxy.
