@@ -292,11 +292,11 @@ def build_stats_payload():
                 'last_seen': client.get('last_seen'),
             })
 
-        by_endpoint = {}
+        by_api_endpoint = {}
         for transit_name, transit_bucket in sorted((cache_stats.get('transits') or {}).items()):
             for key, entry in (transit_bucket or {}).items():
                 endpoint = entry.get('endpoint') or 'unknown'
-                bucket = by_endpoint.setdefault((transit_name, endpoint), {
+                bucket = by_api_endpoint.setdefault((transit_name, endpoint), {
                     'transit': transit_name,
                     'endpoint': endpoint,
                     'query': {},
@@ -309,7 +309,7 @@ def build_stats_payload():
                     'refreshes': [],
                     'requests': [],
                 })
-                bucket['query'] = bucket.get('query') or {}
+                bucket['query'] = {}
                 for field in ('hits', 'misses', 'refreshes', 'requests'):
                     bucket[field].extend(entry.get(field) or [])
                 for field in ('last_access', 'last_hit', 'last_miss', 'last_refresh'):
@@ -319,7 +319,7 @@ def build_stats_payload():
                         if current_value is None or float(value) > float(current_value):
                             bucket[field] = value
 
-        for (transit_name, endpoint), bucket in sorted(by_endpoint.items(), key=lambda item: (item[0][0], item[1].get('last_access') or 0), reverse=True):
+        for (transit_name, endpoint), bucket in sorted(by_api_endpoint.items(), key=lambda item: (item[0][0], item[1].get('last_access') or 0), reverse=True):
             hits = bucket.get('hits') or []
             misses = bucket.get('misses') or []
             refreshes = bucket.get('refreshes') or []
@@ -328,7 +328,7 @@ def build_stats_payload():
                 'transit': transit_name,
                 'cache_key': f"{transit_name}::{endpoint}",
                 'endpoint': endpoint,
-                'query': bucket.get('query') or {},
+                'query': {},
                 'last_access': bucket.get('last_access'),
                 'last_hit': bucket.get('last_hit'),
                 'last_miss': bucket.get('last_miss'),
