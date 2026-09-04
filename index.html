@@ -5,7 +5,6 @@
     (function(){
       const transitMode=(new URLSearchParams(window.location.search).get('transit')||'boston').toLowerCase()==='paris'?'paris':'boston';
       document.documentElement.dataset.transit = transitMode;
-      document.documentElement.classList.add('transit-ready');
     })();
   </script>
   <meta charset="utf-8">
@@ -268,9 +267,9 @@
     }
     const transitMode=(new URLSearchParams(location.search).get('transit')||'boston').toLowerCase()==='paris'?'paris':'boston';
     const PARIS_LINES=[...Array(14)].map((_,i)=>({id:`metro-${i+1}`,name:`Metro line ${i+1}`,mode:'metro',lineRef:i===8?'STIF:Line::C01379:':null})).concat(['A','B','C','D','E'].map((id)=>({id:`rer-${id}`,name:`RER ${id}`,mode:'rer',lineRef:null})));
+    const savedSettings=(()=>{try{const raw=localStorage.getItem(`${STORAGE_KEY}-${transitMode}`)||localStorage.getItem('fitchburg-rail-settings')||'{}';return JSON.parse(raw)||{}}catch(error){console.warn('Could not read saved route settings',error);return {}}})();
     const el={inbound:document.querySelector('#inbound-trains'),outbound:document.querySelector('#outbound-trains'),refresh:document.querySelector('#refresh-button'),status:document.querySelector('#status-message'),dot:document.querySelector('#status-dot'),updated:document.querySelector('#updated-at'),lineMark:document.querySelector('#line-mark'),lineSelector:document.querySelector('#line-selector'),lineTitle:document.querySelector('#line-title'),providerLabel:document.querySelector('#provider-label'),providerFooter:document.querySelector('#provider-footer'),routeSummary:document.querySelector('#route-summary'),inboundTitle:document.querySelector('#inbound-title'),outboundTitle:document.querySelector('#outbound-title'),dialog:document.querySelector('#settings-dialog'),statsDialog:document.querySelector('#stats-dialog'),statsBody:document.querySelector('#stats-body'),statsClose:document.querySelector('#stats-close'),statsRefresh:document.querySelector('#stats-refresh'),form:document.querySelector('#settings-form'),lineField:document.querySelector('#line-field'),endpointField:document.querySelector('#endpoint-field'),remoteField:document.querySelector('#remote-field'),lineSelect:document.querySelector('#line-select'),endpointSelect:document.querySelector('#endpoint-select'),remoteSelect:document.querySelector('#remote-select'),cancelSettings:document.querySelector('#cancel-settings')};
-    let routes=transitMode==='paris'?PARIS_LINES:[],routeStops=[],selectedRouteId=transitMode==='paris'?'metro-9':DEFAULT_ROUTE,selectedRemoteId=transitMode==='paris'?'saint-ambroise':DEFAULT_REMOTE,selectedEndpointId=transitMode==='paris'?'pont-de-sevres':DEFAULT_ENDPOINT;
-    try{const saved=JSON.parse(localStorage.getItem(`${STORAGE_KEY}-${transitMode}`)||localStorage.getItem('fitchburg-rail-settings')||'{}');selectedRouteId=saved.routeId||selectedRouteId;selectedRemoteId=saved.remoteId||selectedRemoteId;selectedEndpointId=saved.endpointId||selectedEndpointId}catch(error){console.warn('Could not read saved route settings',error)}
+    let routes=transitMode==='paris'?PARIS_LINES:[],routeStops=[],selectedRouteId=savedSettings.routeId|| (transitMode==='paris'?'metro-9':DEFAULT_ROUTE),selectedRemoteId=savedSettings.remoteId|| (transitMode==='paris'?'saint-ambroise':DEFAULT_REMOTE),selectedEndpointId=savedSettings.endpointId|| (transitMode==='paris'?'pont-de-sevres':DEFAULT_ENDPOINT);
     const records=(r)=>Array.isArray(r.data)?r.data:[];
     const trip=(r)=>r.relationships?.trip?.data?.id||r.attributes?.trip_id;
     const time=(r)=>r.attributes?.departure_time||r.attributes?.arrival_time;
