@@ -210,6 +210,43 @@
     </form>
   </dialog>
   <script>
+    (function applyTransitDefaults(){
+      const transitMode=(new URLSearchParams(location.search).get('transit')||'boston').toLowerCase()==='paris'?'paris':'boston';
+      const defaults = transitMode === 'paris' ? {
+        provider: 'Île-de-France Mobilités',
+        lineMark: '9',
+        lineTitle: 'Metro line 9',
+        routeSummary: 'Pont de Sèvres ↔ Mairie de Montreuil',
+        inboundTitle: 'Pont de Sèvres <span>to</span> Mairie de Montreuil',
+        outboundTitle: 'Mairie de Montreuil <span>to</span> Pont de Sèvres',
+        footer: 'Data from Île-de-France Mobilités'
+      } : {
+        provider: 'MBTA commuter rail',
+        lineMark: 'F',
+        lineTitle: 'Fitchburg Line',
+        routeSummary: 'Belmont ↔ North Station',
+        inboundTitle: 'Belmont <span>to</span> North Station',
+        outboundTitle: 'North Station <span>to</span> Belmont',
+        footer: 'Data from MBTA'
+      };
+      const provider = document.getElementById('provider-label');
+      const providerFooter = document.getElementById('provider-footer');
+      const lineMark = document.getElementById('line-mark');
+      const lineTitle = document.getElementById('line-title');
+      const routeSummary = document.getElementById('route-summary');
+      const inboundTitle = document.getElementById('inbound-title');
+      const outboundTitle = document.getElementById('outbound-title');
+      if (provider) provider.textContent = defaults.provider;
+      if (providerFooter) providerFooter.textContent = defaults.footer;
+      if (lineMark) lineMark.textContent = defaults.lineMark;
+      if (lineTitle) lineTitle.textContent = defaults.lineTitle;
+      if (routeSummary) routeSummary.textContent = defaults.routeSummary;
+      if (inboundTitle) inboundTitle.innerHTML = defaults.inboundTitle;
+      if (outboundTitle) outboundTitle.innerHTML = defaults.outboundTitle;
+      document.documentElement.dataset.transit = transitMode;
+    })();
+  </script>
+  <script>
     const CACHE_API='api/cache', DEFAULT_ROUTE='CR-Fitchburg', DEFAULT_REMOTE='place-FR-0064', DEFAULT_ENDPOINT='place-north', REFRESH=120000, STORAGE_KEY='transit-settings';
     function setStatusMessage(text, tone='info'){
       if (!text) return;
