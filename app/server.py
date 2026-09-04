@@ -20,13 +20,15 @@ CACHE_TTL_SECONDS = int(os.getenv('CACHE_TTL_SECONDS', '60'))
 PORT = int(os.getenv('PORT', '80'))
 PRIM_API_KEY = os.getenv('PRIM_API_KEY', '')
 MBTA_API_KEY = os.getenv('MBTA_API_KEY', '') or os.getenv('BOSTON_API_KEY', '') or os.getenv('API_KEY', '')
-MAX_THREADS = int(os.getenv('HTTP_WORKERS', '10'))
+DEFAULT_HTTP_WORKERS = 3
+MAX_THREADS = int(os.getenv('HTTP_WORKERS', str(DEFAULT_HTTP_WORKERS)))
 DEFAULT_PARIS_PATH = 'estimated-timetable?LineRef=STIF:Line::C01379:'
 STATIC_ROOT = Path('/app')
 
 cache_lock = threading.RLock()
 cache_store = {}
 transit_last_requested = {}
+refresh_inflight = {}
 cache_stats = {'clients': {}, 'transits': {}}
 DATA_DIR = Path(os.getenv('DATA_DIR', '/data'))
 STATS_FILE = DATA_DIR / 'cache_stats.json'
@@ -258,6 +260,24 @@ def fetch_upstream(transit: str, endpoint: str, query: dict | None = None):
         return json.loads(payload.decode('utf-8'))
 
 
+def begin_refresh(transit: str, endpoint: str, query: dict | None = None):
+    key = read_cache_key(transit, endpoint, query)
+    with cache_lock:
+        if key in refresh_inflight:
+            return None
+        event = threading.Event()
+        refresh_inflight[key] = event
+        return event
+
+
+def finalize_refresh(transit: str, endpoint: str, query: dict | None = None):
+    key = read_cache_key(transit, endpoint, query)
+    with cache_lock:
+        event = refresh_inflight.pop(key, None)
+    if event is not None:
+        event.set()
+
+
 def fetch_and_cache(transit: str, endpoint: str, query: dict | None = None, client_ip: str | None = None, user_agent: str | None = None):
     data = fetch_upstream(transit, endpoint, query)
     key = read_cache_key(transit, endpoint, query)
@@ -445,7 +465,20 @@ class TransitCacheHandler(BaseHTTPRequestHandler):
                     else:
                         record_stats_event('miss', transit, endpoint, request_query, client_ip=client_ip, user_agent=user_agent)
                     if should_refresh and transit_requested_recently(transit):
-                        cached = fetch_and_cache(transit, endpoint, request_query, client_ip=client_ip, user_agent=user_agent)
+                        refresh_key = read_cache_key(transit, endpoint, request_query)
+                        refresh_slot = begin_refresh(transit, endpoint, request_query)
+                        if refresh_slot is not None:
+                            try:
+                                cached = fetch_and_cache(transit, endpoint, request_query, client_ip=client_ip, user_agent=user_agent)
+                            finally:
+                                finalize_refresh(transit, endpoint, request_query)
+                        else:
+                            cached = get_cached_payload(transit, endpoint, request_query)
+                            if cached is None:
+                                wait_event = refresh_inflight.get(refresh_key)
+                                if wait_event is not None:
+                                    wait_event.wait(timeout=0.25)
+                                cached = get_cached_payload(transit, endpoint, request_query)
                     if cached is not None:
                         stale = cached.get('expires_at', 0) <= current_timestamp()
                         body = build_json_response(

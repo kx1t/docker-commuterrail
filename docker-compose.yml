@@ -7,7 +7,7 @@ services:
       PORT: "80"
       DATA_DIR: "/data"
       CACHE_TTL_SECONDS: "60"
-      HTTP_WORKERS: "10"
+      HTTP_WORKERS: "3"
       PRIM_API_KEY: "${PRIM_API_KEY}"
       MBTA_API_KEY: "${MBTA_API_KEY}"
     ports:
