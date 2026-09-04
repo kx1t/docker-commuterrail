@@ -239,9 +239,13 @@ def upstream_url_for(transit: str, endpoint: str, query: dict | None = None):
             line = (query or {}).get('route', '')
             line_number = str(line).split('-')[-1]
             return f"{IDFM_DATA_API}?{urlencode({'where': f'route_long_name=\"{line_number}\"', 'limit': '100'})}"
-        if endpoint.startswith('/stop-monitoring') or endpoint.startswith('stop-monitoring'):
-            return f"{base}/{endpoint.lstrip('/')}"
-        return f"{base}/{endpoint.lstrip('/')}"
+        path = endpoint if endpoint.startswith('/') else f'/{endpoint}'
+        params = urlencode(query or {}, doseq=True)
+        if params:
+            if '?' in path:
+                return f"{base}{path}&{params}"
+            return f"{base}{path}?{params}"
+        return f"{base}{path}"
     path = endpoint if endpoint.startswith('/') else f'/{endpoint}'
     params = urlencode(query or {}, doseq=True)
     suffix = f'?{params}' if params else ''
