@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import datetime
+import copy
 import json
 import mimetypes
 import os
@@ -22,6 +23,7 @@ PRIM_API_KEY = os.getenv('PRIM_API_KEY', '')
 MBTA_API_KEY = os.getenv('MBTA_API_KEY', '') or os.getenv('BOSTON_API_KEY', '') or os.getenv('API_KEY', '')
 DEFAULT_HTTP_WORKERS = 3
 MAX_THREADS = int(os.getenv('HTTP_WORKERS', str(DEFAULT_HTTP_WORKERS)))
+STATS_FLUSH_INTERVAL_SECONDS = int(os.getenv('STATS_FLUSH_INTERVAL_SECONDS', '30'))
 DEFAULT_PARIS_PATH = 'estimated-timetable?LineRef=STIF:Line::C01379:'
 STATIC_ROOT = Path('/app')
 
@@ -30,6 +32,9 @@ cache_store = {}
 transit_last_requested = {}
 refresh_inflight = {}
 cache_stats = {'clients': {}, 'transits': {}}
+stats_dirty = False
+stats_flush_stop = threading.Event()
+stats_flush_thread = None
 DATA_DIR = Path(os.getenv('DATA_DIR', '/data'))
 STATS_FILE = DATA_DIR / 'cache_stats.json'
 
@@ -56,6 +61,7 @@ def sanitize_private_ip(raw_ip: str | None) -> tuple[str | None, bool]:
 
 
 def record_stats_event(event_type: str, transit: str, endpoint: str, query: dict | None = None, client_ip: str | None = None, user_agent: str | None = None):
+    global stats_dirty
     ensure_stats_path()
     if not transit:
         return
@@ -117,10 +123,45 @@ def record_stats_event(event_type: str, transit: str, endpoint: str, query: dict
                 client_bucket['first_seen'] = now
             cutoff = now - 86400
             client_bucket['requests'] = [ts for ts in (client_bucket.get('requests') or []) if float(ts) >= cutoff]
-        try:
-            STATS_FILE.write_text(json.dumps(cache_stats, sort_keys=True))
-        except OSError:
-            pass
+        stats_dirty = True
+
+
+def flush_stats_to_disk(force: bool = False):
+    global stats_dirty
+    ensure_stats_path()
+    with cache_lock:
+        if not force and not stats_dirty:
+            return False
+        snapshot = copy.deepcopy(cache_stats)
+        stats_dirty = False
+    try:
+        STATS_FILE.write_text(json.dumps(snapshot, sort_keys=True))
+        return True
+    except OSError:
+        with cache_lock:
+            stats_dirty = True
+        return False
+
+
+def stats_flush_worker():
+    interval = max(1, STATS_FLUSH_INTERVAL_SECONDS)
+    while not stats_flush_stop.wait(interval):
+        flush_stats_to_disk(force=False)
+
+
+def start_stats_flush_thread():
+    global stats_flush_thread
+    if stats_flush_thread and stats_flush_thread.is_alive():
+        return
+    stats_flush_thread = threading.Thread(target=stats_flush_worker, name='stats-flush-worker', daemon=True)
+    stats_flush_thread.start()
+
+
+def stop_stats_flush_thread():
+    stats_flush_stop.set()
+    if stats_flush_thread and stats_flush_thread.is_alive():
+        stats_flush_thread.join(timeout=2)
+    flush_stats_to_disk(force=True)
 
 
 class ConcurrencyLimitedHTTPServer(ThreadingHTTPServer):
@@ -554,4 +595,8 @@ if __name__ == '__main__':
     httpd.daemon_threads = True
     httpd.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     print(f'Serving on port {PORT} with concurrency limit {MAX_THREADS}')
-    httpd.serve_forever()
+    start_stats_flush_thread()
+    try:
+        httpd.serve_forever()
+    finally:
+        stop_stats_flush_thread()
