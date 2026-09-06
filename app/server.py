@@ -10,6 +10,7 @@ import time
 from ipaddress import ip_address
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import Any, Dict, Optional, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlencode, urlparse
 from urllib.request import Request, urlopen
@@ -46,7 +47,7 @@ def ensure_stats_path():
         pass
 
 
-def sanitize_private_ip(raw_ip: str | None) -> tuple[str | None, bool]:
+def sanitize_private_ip(raw_ip: Optional[str]) -> Tuple[Optional[str], bool]:
     candidate = (raw_ip or '').strip().split(',')[0].strip()
     if not candidate or candidate in ('unknown', '-', 'None', 'null'):
         return None, True
@@ -60,7 +61,48 @@ def sanitize_private_ip(raw_ip: str | None) -> tuple[str | None, bool]:
     return str(parsed), False
 
 
-def record_stats_event(event_type: str, transit: str, endpoint: str, query: dict | None = None, client_ip: str | None = None, user_agent: str | None = None):
+def _parse_forwarded_for_value(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return None
+    for chunk in str(value).split(','):
+        candidate = chunk.strip().strip('"')
+        if not candidate or candidate.lower() in ('unknown', '-', 'none', 'null'):
+            continue
+        if candidate.startswith('[') and ']' in candidate:
+            candidate = candidate[1:candidate.index(']')]
+        elif ':' in candidate and candidate.count(':') == 1 and candidate.rsplit(':', 1)[1].isdigit():
+            candidate = candidate.rsplit(':', 1)[0]
+        return candidate
+    return None
+
+
+def get_client_ip_from_headers(headers) -> Optional[str]:
+    for header_name in ('X-Forwarded-For', 'CF-Connecting-IP', 'True-Client-IP', 'X-Real-IP', 'X-Client-IP'):
+        value = headers.get(header_name) if hasattr(headers, 'get') else None
+        if value:
+            parsed = _parse_forwarded_for_value(value)
+            if parsed:
+                return parsed
+    forwarded = headers.get('Forwarded') if hasattr(headers, 'get') else None
+    if forwarded:
+        for segment in str(forwarded).split(','):
+            for token in segment.split(';'):
+                item = token.strip()
+                if not item.lower().startswith('for='):
+                    continue
+                candidate = item.split('=', 1)[1].strip().strip('"')
+                if candidate.startswith('[') and ']' in candidate:
+                    candidate = candidate[1:candidate.index(']')]
+                elif candidate.startswith('[') and ']' not in candidate:
+                    candidate = candidate.strip('[]')
+                elif ':' in candidate and candidate.count(':') == 1 and candidate.rsplit(':', 1)[1].isdigit():
+                    candidate = candidate.rsplit(':', 1)[0]
+                if candidate:
+                    return candidate
+    return None
+
+
+def record_stats_event(event_type: str, transit: str, endpoint: str, query: Optional[Dict[str, Any]] = None, client_ip: Optional[str] = None, user_agent: Optional[str] = None):
     global stats_dirty
     ensure_stats_path()
     if not transit:
@@ -203,7 +245,7 @@ def make_headers(transit: str) -> dict:
     return {}
 
 
-def read_cache_key(transit: str, endpoint: str, query: dict | None = None) -> str:
+def read_cache_key(transit: str, endpoint: str, query: Optional[Dict[str, Any]] = None) -> str:
     return f"{normalize_key(transit)}::{normalize_key(endpoint)}::{json.dumps(query or {}, sort_keys=True)}"
 
 
@@ -220,7 +262,7 @@ def transit_requested_recently(transit: str) -> bool:
         return (current_timestamp() - last_time) <= CACHE_TTL_SECONDS
 
 
-def normalize_api_endpoint(value: str | None) -> str:
+def normalize_api_endpoint(value: Optional[str]) -> str:
     candidate = (value or '').strip()
     if not candidate:
         return 'unknown'
@@ -273,13 +315,14 @@ def error_for_missing_cache(exc):
     return f"Error: transit data cannot be retrieved. {http_error_text(exc)}"
 
 
-def upstream_url_for(transit: str, endpoint: str, query: dict | None = None):
+def upstream_url_for(transit: str, endpoint: str, query: Optional[Dict[str, Any]] = None):
     base = PRIM_API if transit.lower() == 'paris' else MBTA_API
     if transit.lower() == 'paris':
         if endpoint in ('/stops', 'stops'):
             line = (query or {}).get('route', '')
             line_number = str(line).split('-')[-1]
-            return f"{IDFM_DATA_API}?{urlencode({'where': f'route_long_name=\"{line_number}\"', 'limit': '100'})}"
+            where_clause = f'route_long_name="{line_number}"'
+            return f"{IDFM_DATA_API}?{urlencode({'where': where_clause, 'limit': '100'})}"
         path = endpoint if endpoint.startswith('/') else f'/{endpoint}'
         params = urlencode(query or {}, doseq=True)
         if params:
@@ -293,7 +336,7 @@ def upstream_url_for(transit: str, endpoint: str, query: dict | None = None):
     return f"{base}{path}{suffix}"
 
 
-def fetch_upstream(transit: str, endpoint: str, query: dict | None = None):
+def fetch_upstream(transit: str, endpoint: str, query: Optional[Dict[str, Any]] = None):
     if not endpoint:
         raise ValueError('empty API endpoint')
     url = upstream_url_for(transit, endpoint, query)
@@ -305,7 +348,7 @@ def fetch_upstream(transit: str, endpoint: str, query: dict | None = None):
         return json.loads(payload.decode('utf-8'))
 
 
-def begin_refresh(transit: str, endpoint: str, query: dict | None = None):
+def begin_refresh(transit: str, endpoint: str, query: Optional[Dict[str, Any]] = None):
     key = read_cache_key(transit, endpoint, query)
     with cache_lock:
         if key in refresh_inflight:
@@ -315,7 +358,7 @@ def begin_refresh(transit: str, endpoint: str, query: dict | None = None):
         return event
 
 
-def finalize_refresh(transit: str, endpoint: str, query: dict | None = None):
+def finalize_refresh(transit: str, endpoint: str, query: Optional[Dict[str, Any]] = None):
     key = read_cache_key(transit, endpoint, query)
     with cache_lock:
         event = refresh_inflight.pop(key, None)
@@ -323,7 +366,7 @@ def finalize_refresh(transit: str, endpoint: str, query: dict | None = None):
         event.set()
 
 
-def fetch_and_cache(transit: str, endpoint: str, query: dict | None = None, client_ip: str | None = None, user_agent: str | None = None):
+def fetch_and_cache(transit: str, endpoint: str, query: Optional[Dict[str, Any]] = None, client_ip: Optional[str] = None, user_agent: Optional[str] = None):
     data = fetch_upstream(transit, endpoint, query)
     key = read_cache_key(transit, endpoint, query)
     fetched_at = current_timestamp()
@@ -337,7 +380,7 @@ def fetch_and_cache(transit: str, endpoint: str, query: dict | None = None, clie
     return cache_store[key]
 
 
-def get_cached_payload(transit: str, endpoint: str, query: dict | None = None):
+def get_cached_payload(transit: str, endpoint: str, query: Optional[Dict[str, Any]] = None):
     key = read_cache_key(transit, endpoint, query)
     with cache_lock:
         cached = cache_store.get(key)
@@ -500,8 +543,9 @@ class TransitCacheHandler(BaseHTTPRequestHandler):
 
             if request_path in ('/api/cache', '/cache') or request_path.startswith('/api/cache/'):
                 try:
-                    client_ip = (self.headers.get('X-Forwarded-For') or self.headers.get('X-Real-IP') or self.client_address[0] if hasattr(self, 'client_address') else None)
-                    client_ip = client_ip.split(',')[0].strip() if isinstance(client_ip, str) and client_ip else client_ip
+                    client_ip = get_client_ip_from_headers(self.headers)
+                    if not client_ip and hasattr(self, 'client_address'):
+                        client_ip = self.client_address[0]
                     user_agent = self.headers.get('User-Agent')
                     cached = get_cached_payload(transit, endpoint, request_query)
                     should_refresh = cached is None or cached.get('expires_at', 0) <= current_timestamp()
