@@ -515,6 +515,24 @@ def build_json_response(transit: str, endpoint: str, payload=None, status='ok', 
     return response
 
 
+def log_debug_headers(self):
+    ensure_stats_path()
+    payload = {
+        'time': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        'client_address': list(getattr(self, 'client_address', ('', 0))),
+        'path': self.path,
+        'headers': {key: value for key, value in self.headers.items()},
+    }
+    try:
+        log_path = DATA_DIR / 'debug_headers.log'
+        with log_path.open('a', encoding='utf-8') as handle:
+            handle.write(json.dumps(payload, sort_keys=True) + '\n')
+    except OSError:
+        pass
+    print(json.dumps(payload, sort_keys=True))
+    return payload
+
+
 def serve_static_file(self, relative_path: str):
     candidate = (STATIC_ROOT / relative_path.lstrip('/')).resolve()
     if not str(candidate).startswith(str(STATIC_ROOT.resolve())):
@@ -550,6 +568,14 @@ class TransitCacheHandler(BaseHTTPRequestHandler):
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
                 self.wfile.write(json.dumps({'status': 'ok', 'transit': transit}).encode())
+                return
+
+            if request_path in ('/debug/headers', '/headers'):
+                payload = log_debug_headers(self)
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'ok', 'data': payload}).encode('utf-8'))
                 return
 
             if request_path in ('/api/stats', '/stats'):
