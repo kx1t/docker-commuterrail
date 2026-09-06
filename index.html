@@ -319,15 +319,18 @@
         const rows = payload?.data || {};
         const clients = Array.isArray(rows.clients) ? rows.clients : [];
         const transits = Array.isArray(rows.transits) ? rows.transits : [];
-        const clientHtml = clients.length ? clients.map((client) => `
-          <tr>
-            <td>${client.ip || 'Internal'}</td>
-            <td>${client.user_agent || 'unknown'}</td>
-            <td>${client.requests_last_minute}</td>
-            <td>${client.requests_last_hour}</td>
-            <td>${client.requests_last_day}</td>
-          </tr>
-        `).join('') : '<tr><td colspan="5" class="muted">No client activity recorded.</td></tr>';
+        const clientHtml = clients.length ? clients.map((client) => {
+          const resolved = client.name && client.ip && client.name !== client.ip ? `${client.name} (${client.ip})` : (client.name || client.ip || 'Internal');
+          return `
+            <tr>
+              <td>${resolved}</td>
+              <td>${client.user_agent || 'unknown'}</td>
+              <td>${client.requests_last_minute}</td>
+              <td>${client.requests_last_hour}</td>
+              <td>${client.requests_last_day}</td>
+            </tr>
+          `;
+        }).join('') : '<tr><td colspan="5" class="muted">No client activity recorded.</td></tr>';
         const transitHtml = transits.length ? transits.map((item) => {
           const expiresAt = item.last_refresh ? item.last_refresh + 60 : null;
           const ttl = expiresAt ? Math.max(0, Math.ceil(expiresAt - (Date.now() / 1000))) : 0;
@@ -358,7 +361,7 @@
           <section class="stats-section">
             <h3>Clients</h3>
             <table class="stats-table">
-              <thead><tr><th>IP</th><th>User agent</th><th>1m</th><th>1h</th><th>24h</th></tr></thead>
+              <thead><tr><th>Client</th><th>User agent</th><th>1m</th><th>1h</th><th>24h</th></tr></thead>
               <tbody>${clientHtml}</tbody>
             </table>
           </section>

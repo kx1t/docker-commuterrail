@@ -33,11 +33,17 @@ cache_store = {}
 transit_last_requested = {}
 refresh_inflight = {}
 cache_stats = {'clients': {}, 'transits': {}}
+hostname_cache = {}
+hostname_pending = set()
 stats_dirty = False
 stats_flush_stop = threading.Event()
 stats_flush_thread = None
+hostname_refresh_stop = threading.Event()
+hostname_refresh_thread = None
 DATA_DIR = Path(os.getenv('DATA_DIR', '/data'))
 STATS_FILE = DATA_DIR / 'cache_stats.json'
+DNS_TTL_SECONDS = int(os.getenv('DNS_TTL_SECONDS', '86400'))
+DNS_RETRY_SECONDS = int(os.getenv('DNS_RETRY_SECONDS', '86400'))
 
 
 def ensure_stats_path():
@@ -170,6 +176,7 @@ def record_stats_event(event_type: str, transit: str, endpoint: str, query: Opti
             if safe_ip:
                 client_bucket['ip'] = safe_ip
                 client_bucket['internal_ip'] = False
+                queue_hostname_lookup(safe_ip)
             else:
                 client_bucket['ip'] = None
                 client_bucket['internal_ip'] = True
@@ -198,6 +205,92 @@ def flush_stats_to_disk(force: bool = False):
         with cache_lock:
             stats_dirty = True
         return False
+
+
+def queue_hostname_lookup(ip: Optional[str]):
+    if not ip:
+        return
+    candidate = (ip or '').strip()
+    if not candidate or candidate.lower() in ('unknown', '-', 'none', 'null'):
+        return
+    try:
+        parsed = ip_address(candidate)
+    except ValueError:
+        return
+    if parsed.is_private or parsed.is_loopback or parsed.is_link_local or parsed.is_reserved:
+        return
+    now = current_timestamp()
+    with cache_lock:
+        entry = hostname_cache.get(candidate)
+        if entry is not None:
+            name = entry.get('name')
+            last_attempt = float(entry.get('last_attempted', 0) or 0)
+            if name and (now - float(entry.get('resolved_at', 0) or 0)) < DNS_TTL_SECONDS:
+                return
+            if name is None and (now - last_attempt) < DNS_RETRY_SECONDS:
+                return
+        hostname_pending.add(candidate)
+
+
+def refresh_hostname_cache():
+    if not hostname_pending:
+        return
+    with cache_lock:
+        pending = list(hostname_pending)
+        hostname_pending.clear()
+    for ip in pending:
+        name = None
+        try:
+            resolved = socket.gethostbyaddr(ip)
+            if resolved and resolved[0]:
+                name = resolved[0]
+        except (socket.herror, OSError, ValueError):
+            name = None
+        now = current_timestamp()
+        with cache_lock:
+            hostname_cache[ip] = {
+                'name': name,
+                'resolved_at': now,
+                'last_attempted': now,
+                'not_found': name is None,
+            }
+
+
+def hostname_refresh_worker():
+    while not hostname_refresh_stop.wait(30):
+        refresh_hostname_cache()
+
+
+def start_hostname_refresh_thread():
+    global hostname_refresh_thread
+    if hostname_refresh_thread and hostname_refresh_thread.is_alive():
+        return
+    hostname_refresh_thread = threading.Thread(target=hostname_refresh_worker, name='hostname-refresh-worker', daemon=True)
+    hostname_refresh_thread.start()
+
+
+def stop_hostname_refresh_thread():
+    hostname_refresh_stop.set()
+    if hostname_refresh_thread and hostname_refresh_thread.is_alive():
+        hostname_refresh_thread.join(timeout=2)
+
+
+def cached_hostname_for_ip(ip: Optional[str]) -> Optional[str]:
+    if not ip:
+        return None
+    candidate = (ip or '').strip()
+    if not candidate:
+        return None
+    with cache_lock:
+        entry = hostname_cache.get(candidate)
+        if not entry:
+            return None
+        name = entry.get('name')
+        if name:
+            return name
+        if entry.get('not_found'):
+            return None
+        return None
 
 
 def stats_flush_worker():
@@ -418,8 +511,10 @@ def build_stats_payload():
             ip_value = client.get('ip')
             if not ip_value and client.get('internal_ip'):
                 ip_value = 'Internal'
+            resolved_name = cached_hostname_for_ip(ip_value) if isinstance(ip_value, str) and ip_value != 'Internal' else None
             snapshot['clients'].append({
                 'client': client_key,
+                'name': resolved_name,
                 'ip': ip_value,
                 'internal_ip': bool(client.get('internal_ip')),
                 'user_agent': client.get('user_agent') or 'unknown',
@@ -515,24 +610,6 @@ def build_json_response(transit: str, endpoint: str, payload=None, status='ok', 
     return response
 
 
-def log_debug_headers(self):
-    ensure_stats_path()
-    payload = {
-        'time': datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        'client_address': list(getattr(self, 'client_address', ('', 0))),
-        'path': self.path,
-        'headers': {key: value for key, value in self.headers.items()},
-    }
-    try:
-        log_path = DATA_DIR / 'debug_headers.log'
-        with log_path.open('a', encoding='utf-8') as handle:
-            handle.write(json.dumps(payload, sort_keys=True) + '\n')
-    except OSError:
-        pass
-    print(json.dumps(payload, sort_keys=True))
-    return payload
-
-
 def serve_static_file(self, relative_path: str):
     candidate = (STATIC_ROOT / relative_path.lstrip('/')).resolve()
     if not str(candidate).startswith(str(STATIC_ROOT.resolve())):
@@ -568,14 +645,6 @@ class TransitCacheHandler(BaseHTTPRequestHandler):
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
                 self.wfile.write(json.dumps({'status': 'ok', 'transit': transit}).encode())
-                return
-
-            if request_path in ('/debug/headers', '/headers'):
-                payload = log_debug_headers(self)
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps({'status': 'ok', 'data': payload}).encode('utf-8'))
                 return
 
             if request_path in ('/api/stats', '/stats'):
@@ -685,7 +754,9 @@ if __name__ == '__main__':
     httpd.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     print(f'Serving on port {PORT} with concurrency limit {MAX_THREADS}')
     start_stats_flush_thread()
+    start_hostname_refresh_thread()
     try:
         httpd.serve_forever()
     finally:
         stop_stats_flush_thread()
+        stop_hostname_refresh_thread()
