@@ -102,6 +102,18 @@ def get_client_ip_from_headers(headers) -> Optional[str]:
     return None
 
 
+def prune_old_client_stats(now: Optional[float] = None):
+    cutoff = (now if now is not None else current_timestamp()) - 86400
+    with cache_lock:
+        clients = cache_stats.get('clients') or {}
+        for client_key in list(clients.keys()):
+            entry = clients.get(client_key) or {}
+            requests = [float(ts) for ts in (entry.get('requests') or []) if ts is not None]
+            if not requests or max(requests) < cutoff:
+                clients.pop(client_key, None)
+        cache_stats['clients'] = clients
+
+
 def record_stats_event(event_type: str, transit: str, endpoint: str, query: Optional[Dict[str, Any]] = None, client_ip: Optional[str] = None, user_agent: Optional[str] = None):
     global stats_dirty
     ensure_stats_path()
@@ -165,6 +177,9 @@ def record_stats_event(event_type: str, transit: str, endpoint: str, query: Opti
                 client_bucket['first_seen'] = now
             cutoff = now - 86400
             client_bucket['requests'] = [ts for ts in (client_bucket.get('requests') or []) if float(ts) >= cutoff]
+            if not client_bucket.get('requests'):
+                cache_stats['clients'].pop(client_key, None)
+        prune_old_client_stats(now=now)
         stats_dirty = True
 
 
@@ -395,10 +410,14 @@ def build_stats_payload():
     now = current_timestamp()
     snapshot = {'generated_at': now, 'clients': [], 'transits': []}
     with cache_lock:
+        cutoff = now - 86400
         for client_key, client in sorted((cache_stats.get('clients') or {}).items(), key=lambda item: item[1].get('last_seen', 0), reverse=True):
+            requests = [float(ts) for ts in (client.get('requests') or []) if ts is not None]
+            if not requests or max(requests) < cutoff:
+                continue
             ip_value = client.get('ip')
             if not ip_value and client.get('internal_ip'):
-                ip_value = 'private IP suppressed'
+                ip_value = 'Internal'
             snapshot['clients'].append({
                 'client': client_key,
                 'ip': ip_value,
