@@ -254,6 +254,11 @@
       overflow-wrap: anywhere;
       max-width: 100%;
     }
+    .stats-meta-row .meta-item:not(:last-child)::after {
+      content: "·";
+      margin-left: 8px;
+      color: var(--muted);
+    }
     .stats-meta-row .meta-item a,
     .stats-meta-row a {
       color: var(--ink);
@@ -531,6 +536,22 @@
 
       return `${day}${month}${year}_${hh}${mm}${ss}${zone.toUpperCase()}`;
     }
+
+    function formatElapsedRuntime(secondsValue) {
+      const totalSeconds = Number(secondsValue);
+      if (!Number.isFinite(totalSeconds)) {
+        return 'unknown';
+      }
+      const safeSeconds = Math.max(0, Math.round(totalSeconds));
+      const days = Math.floor(safeSeconds / 86400);
+      const hours = Math.floor((safeSeconds % 86400) / 3600);
+      const secs = safeSeconds % 60;
+      const parts = [];
+      if (days > 0) parts.push(`${days}d`);
+      if (hours > 0 || parts.length > 0) parts.push(`${hours}h`);
+      if (secs > 0 || parts.length === 0) parts.push(`${secs}s`);
+      return parts.join(' ');
+    }
     async function loadStatsDialog(){
       if (!el.statsDialog) return;
       el.statsBody.innerHTML = '<div class="loading-state">Loading cache diagnostics…</div>';
@@ -601,7 +622,7 @@
           <div class="stats-meta-row">
             <span class="meta-item">${rows.runtime?.commit ? `<a href="https://github.com/kx1t/docker-commuterrail/commit/${rows.runtime.commit}" target="_blank" rel="noreferrer">commit ${rows.runtime.commit}</a>` : 'commit unknown'}</span>
             <span class="meta-item">${rows.runtime?.build_date && rows.runtime.build_date !== 'unknown' ? `built ${formatStatsTimestamp(rows.runtime.build_date)}` : 'built unknown'}</span>
-            <span class="meta-item">${rows.runtime?.up_since ? `up since ${formatStatsTimestamp(rows.runtime.up_since, true)}` : 'up since unknown'}</span>
+            <span class="meta-item">${rows.runtime?.up_since ? `up since ${formatStatsTimestamp(rows.runtime.up_since, true)} (${formatElapsedRuntime((Date.now() / 1000) - Number(rows.runtime.up_since))})` : 'up since unknown'}</span>
             <span class="meta-item"><a href="https://github.com/kx1t/docker-commuterrail" target="_blank" rel="noreferrer">SW Repo</a></span>
           </div>
         `;
