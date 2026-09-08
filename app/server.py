@@ -44,6 +44,16 @@ DATA_DIR = Path(os.getenv('DATA_DIR', '/data'))
 STATS_FILE = DATA_DIR / 'cache_stats.json'
 DNS_TTL_SECONDS = int(os.getenv('DNS_TTL_SECONDS', '86400'))
 DNS_RETRY_SECONDS = int(os.getenv('DNS_RETRY_SECONDS', '86400'))
+GIT_COMMIT = (os.getenv('GIT_COMMIT') or 'unknown').strip()
+BUILD_DATE = (os.getenv('BUILD_DATE') or 'unknown').strip()
+CONTAINER_STARTED_AT = time.time()
+
+
+def short_commit(value: str) -> str:
+    candidate = (value or 'unknown').strip()
+    if candidate in ('', 'unknown', 'None', 'null'):
+        return 'unknown'
+    return candidate[:7]
 
 
 def ensure_stats_path():
@@ -501,7 +511,16 @@ def get_cached_payload(transit: str, endpoint: str, query: Optional[Dict[str, An
 
 def build_stats_payload():
     now = current_timestamp()
-    snapshot = {'generated_at': now, 'clients': [], 'transits': []}
+    snapshot = {
+        'generated_at': now,
+        'clients': [],
+        'transits': [],
+        'runtime': {
+            'commit': short_commit(GIT_COMMIT),
+            'build_date': BUILD_DATE if BUILD_DATE and BUILD_DATE not in ('unknown', 'None', 'null') else 'unknown',
+            'up_since': CONTAINER_STARTED_AT,
+        },
+    }
     with cache_lock:
         cutoff = now - 86400
         for client_key, client in sorted((cache_stats.get('clients') or {}).items(), key=lambda item: item[1].get('last_seen', 0), reverse=True):

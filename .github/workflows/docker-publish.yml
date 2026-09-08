@@ -46,6 +46,9 @@ jobs:
           push: true
           provenance: false
           sbom: false
+          build-args: |
+            GIT_COMMIT=${{ github.sha }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp || github.run_started_at }}
           cache-from: type=gha,scope=build-${{ matrix.platform }}
           cache-to: type=gha,mode=max,scope=build-${{ matrix.platform }}
           tags: |

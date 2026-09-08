@@ -210,6 +210,17 @@
     .stats-table th { color: var(--muted); font-weight: 600; }
     .stats-table th:first-child, .stats-table td:first-child { width: 210px; min-width: 210px; max-width: 210px; }
     .stats-table td:first-child { overflow-wrap: anywhere; }
+    .stats-meta-row {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--rule);
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      overflow-wrap: anywhere;
+    }
     .muted { color: var(--muted); }
     .badge { display: inline-block; border-radius: 999px; padding: 4px 8px; background: #edf8f2; color: var(--green); font-size: 11px; font-weight: 700; }
     @media (max-width: 520px) {
@@ -497,6 +508,9 @@
               <tbody>${transitHtml}</tbody>
             </table>
           </section>
+          <div class="stats-meta-row">
+            ${rows.runtime?.commit ? `commit ${rows.runtime.commit}` : 'commit unknown'} · ${rows.runtime?.build_date && rows.runtime.build_date !== 'unknown' ? `built ${new Date(rows.runtime.build_date).toLocaleString()}` : 'built unknown'} · ${rows.runtime?.up_since ? `up since ${new Date(rows.runtime.up_since * 1000).toLocaleString()}` : 'up since unknown'}
+          </div>
         `;
       } catch (error) {
         console.error(error);
