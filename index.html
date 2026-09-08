@@ -60,12 +60,96 @@
     .stats-dialog::backdrop {
       background: rgba(16,42,67,0.55);
     }
+    .tips-dialog {
+      width: min(100vw - 18px, 760px);
+      max-width: 760px;
+      min-height: min(90vh, 760px);
+      border: 0;
+      border-radius: 22px;
+      padding: 0;
+      background: #f5f7f8;
+      box-shadow: 0 24px 60px rgba(16,42,67,0.28);
+    }
+    .tips-dialog::backdrop {
+      background: rgba(16,42,67,0.55);
+    }
     .stats-page {
       display: flex;
       flex-direction: column;
       height: min(90vh, 760px);
       font-family: var(--sans);
       color: var(--ink);
+    }
+    .tips-page {
+      display: flex;
+      flex-direction: column;
+      height: min(90vh, 760px);
+      font-family: var(--sans);
+      color: var(--ink);
+    }
+    .tips-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 18px 18px 14px;
+      border-bottom: 1px solid var(--rule);
+      background: linear-gradient(180deg, #edf5f1, #f5f7f8);
+    }
+    .tips-header h2 {
+      margin: 0;
+      font-size: clamp(22px, 5vw, 32px);
+      letter-spacing: -0.04em;
+    }
+    .close-tips {
+      border: 1px solid var(--rule);
+      background: white;
+      color: var(--ink);
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .tips-body {
+      overflow: auto;
+      padding: 16px 18px 22px;
+      line-height: 1.6;
+      font-size: 15px;
+    }
+    .tips-body h3 {
+      margin: 0 0 10px;
+      font-size: clamp(18px, 4vw, 24px);
+      letter-spacing: -0.04em;
+    }
+    .tips-body ul {
+      margin: 0 0 16px 18px;
+      padding: 0;
+    }
+    .tips-body li {
+      margin-bottom: 8px;
+    }
+    .tips-body p {
+      margin: 0 0 14px;
+    }
+    .tips-body a {
+      color: var(--ink);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      text-decoration-color: var(--orange);
+      word-break: break-word;
+    }
+    .tips-body img {
+      display: block;
+      width: min(50vw, 420px);
+      max-width: 100%;
+      height: auto;
+      margin: 12px auto 18px;
+      border-radius: 12px;
+      border: 1px solid var(--rule);
+      background: white;
+    }
+    .tips-body .centered {
+      text-align: center;
     }
     .stats-header {
       display: flex;
@@ -188,7 +272,7 @@
     <footer class="app-footer">
       <button id="provider-footer" type="button" class="provider-footer-button" style="background:none;border:none;padding:0;color:inherit;font:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:3px;">Data from MBTA</button>
       <span class="footer-separator">•</span>
-      <span>Times shown in your local timezone</span>
+      <button id="help-link" type="button" class="provider-footer-button" style="background:none;border:none;padding:0;color:inherit;font:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:3px;">Hints and Tips</button>
       <span class="footer-separator">•</span>
       <span>&copy; 2026 Ramon F. Kolb, kx1t</span>
     </footer>
@@ -204,6 +288,45 @@
       </div>
       <div class="stats-body" id="stats-body">
         <div class="loading-state">Loading cache diagnostics…</div>
+      </div>
+    </div>
+  </dialog>
+  <dialog id="tips-dialog" class="tips-dialog" aria-labelledby="tips-title">
+    <div class="tips-page">
+      <div class="tips-header">
+        <h2 id="tips-title">Hints and Tips</h2>
+        <button type="button" class="close-tips" id="tips-close">Close</button>
+      </div>
+      <div class="tips-body">
+        <h3>Tips and Hints</h3>
+        <ul>
+          <li>Click on the "MBTA Commuter Rail" or "Île de France Mobilites" title to switch between transit systems</li>
+          <li>Click the currently selected line or the title with the two stations to change these</li>
+        </ul>
+
+        <h3>Install this as a Web App on your iPhone</h3>
+        <p>The following instructions are for iPhone and Safari. The process is similar for Android and/or Chrome.</p>
+        <ul>
+          <li>Make sure NOT to use an anonymous/private window when you browse to <a href="https://kx1t.com/commuterrail" target="_blank" rel="noreferrer">https://kx1t.com/commuterrail</a> because those will prevent the system from remembering your last choice of transit line and stations!</li>
+          <li>Select the Transit authority, line, and stations you are interested in (see above)</li>
+          <li>Click the "Share" button. In Safari, it's the square with arrow button on the bottom of the screen. In Chrome, this button is in the address bar.</li>
+        </ul>
+        <div class="centered">
+          <img src="./assets/main_screen.jpg" alt="Main screen">
+        </div>
+        <ul>
+          <li>Select "Add to Home Screen". You may have to scroll down to see this</li>
+        </ul>
+        <div class="centered">
+          <img src="./assets/add_to_home_screen.jpg" alt="Add to Home Screen">
+        </div>
+        <ul>
+          <li>Change the name to something appropriate. Make sure that "Open as Web Page" is active. Then press "Add"</li>
+        </ul>
+        <div class="centered">
+          <img src="./assets/save_to_home_screen.jpg" alt="Save to Home Screen">
+        </div>
+        <p>Done!</p>
       </div>
     </div>
   </dialog>
@@ -388,7 +511,29 @@
     async function openStatsDialog(){
       await loadStatsDialog();
     }
+    function openTipsDialog(){
+      const tipsDialog = document.getElementById('tips-dialog');
+      if (!tipsDialog) return;
+      if (typeof tipsDialog.showModal === 'function') {
+        tipsDialog.showModal();
+      } else {
+        tipsDialog.setAttribute('open', 'open');
+      }
+    }
+    function closeTipsDialog(){
+      const tipsDialog = document.getElementById('tips-dialog');
+      if (!tipsDialog) return;
+      if (typeof tipsDialog.close === 'function') {
+        tipsDialog.close();
+      } else {
+        tipsDialog.removeAttribute('open');
+      }
+    }
     function switchTransitMode(nextMode){const url=new URL(location.href);url.searchParams.set('transit',nextMode);location.assign(url.toString())}
+    const helpLink = document.getElementById('help-link');
+    const tipsClose = document.getElementById('tips-close');
+    if (helpLink) helpLink.addEventListener('click', openTipsDialog);
+    if (tipsClose) tipsClose.addEventListener('click', closeTipsDialog);
     el.lineSelector.addEventListener('click',()=>openSettings('line'));el.routeSummary.addEventListener('click',()=>openSettings('stations'));el.endpointSelect.addEventListener('change',()=>{selectedEndpointId=el.endpointSelect.value;selectedRemoteId=el.remoteSelect.value||selectedRemoteId;if(dialogMode==='stations'){populateStationOptions()}else{updateRouteText()}});el.remoteSelect.addEventListener('change',()=>{selectedRemoteId=el.remoteSelect.value;if(dialogMode!=='stations')updateRouteText()});el.form.addEventListener('submit',async(event)=>{event.preventDefault();if(dialogMode==='line'){selectedRouteId=el.lineSelect.value;el.dialog.close();await prepareRoute(selectedRouteId,false)}else{selectedEndpointId=el.endpointSelect.value;selectedRemoteId=el.remoteSelect.value;el.dialog.close()}localStorage.setItem(`${STORAGE_KEY}-${transitMode}`,JSON.stringify({routeId:selectedRouteId,remoteId:selectedRemoteId,endpointId:selectedEndpointId}));updateRouteText();load()});el.cancelSettings.addEventListener('click',()=>el.dialog.close());el.refresh.addEventListener('click',load);el.providerFooter.addEventListener('click',openStatsDialog);el.statsClose.addEventListener('click',()=>{if(typeof el.statsDialog.close==='function'){el.statsDialog.close();}else{el.statsDialog.removeAttribute('open');}});el.statsRefresh.addEventListener('click',loadStatsDialog);el.providerLabel.addEventListener('click',()=>switchTransitMode(transitMode==='paris'?'boston':'paris'));initialize();setInterval(load,REFRESH);
   </script>
 </body>
