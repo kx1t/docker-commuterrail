@@ -493,23 +493,40 @@
     async function load(){if(loadInFlight)return;loadInFlight=true;el.status.textContent='Checking live departures...';el.dot.className='status-dot loading';el.refresh.disabled=true;try{if(transitMode==='paris'){await loadParis()}else{await loadBoston()}el.status.textContent=transitMode==='paris'&&parisUsedEstimatedFallback?'Scheduled data only':'Live data connected';el.updated.textContent=`Updated ${new Intl.DateTimeFormat(undefined,{hour:'numeric',minute:'2-digit'}).format(new Date())}`;el.dot.className=transitMode==='paris'&&parisUsedEstimatedFallback?'status-dot scheduled':'status-dot connected'}catch(error){console.error(error);el.inbound.innerHTML=el.outbound.innerHTML='<div class="empty-state">Live data temporarily unavailable</div>';el.status.textContent=`Could not reach ${transitMode==='paris'?'Île-de-France Mobilités':'MBTA'} live data`;el.dot.className='status-dot error';el.updated.textContent=''}finally{loadInFlight=false;el.refresh.disabled=false}}
     async function initialize(){try{if(transitMode==='boston'){routes=records(await mbta('/routes',{'filter[type]':'2'}));if(!routes.length)throw Error('No commuter rail routes found');if(!routes.some((route)=>route.id===selectedRouteId))selectedRouteId=DEFAULT_ROUTE}else if(!routes.some((route)=>route.id===selectedRouteId))selectedRouteId='metro-9';populateLineOptions();await prepareRoute(selectedRouteId,false);updateRouteText();document.documentElement.classList.add('transit-ready');load()}catch(error){console.error(error);updateRouteText();document.documentElement.classList.add('transit-ready');setStatusMessage(`Could not load ${transitMode==='paris'?'Paris':'commuter rail'} lines`,'error');el.inbound.innerHTML=el.outbound.innerHTML='<div class="empty-state">Live data temporarily unavailable</div>'}}
     function formatStatsTimestamp(value, isUnixSeconds = false) {
-      if (value === null || value === undefined || value === 'unknown' || value === '') {
+      if (value === null || value === undefined || value === 'unknown' || value === '' || value === 'null') {
         return 'unknown';
       }
-      const timestamp = isUnixSeconds ? Number(value) * 1000 : Number(value);
-      const date = new Date(timestamp);
+
+      const raw = String(value).trim();
+      let date;
+
+      if (/^\d+(?:\.\d+)?$/.test(raw)) {
+        const numericValue = Number(raw);
+        const epochMs = isUnixSeconds || Math.abs(numericValue) < 1e12 ? numericValue * 1000 : numericValue;
+        date = new Date(epochMs);
+      } else {
+        date = new Date(raw);
+      }
+
       if (Number.isNaN(date.getTime())) {
         return 'unknown';
       }
+
       const pad = (num) => String(num).padStart(2, '0');
-      const month = date.toLocaleString('en-US', { month: 'short', timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }).toUpperCase();
+      const month = date.toLocaleString('en-US', { month: 'short' }).toUpperCase();
       const day = pad(date.getDate());
       const year = date.getFullYear();
       const hh = pad(date.getHours());
       const mm = pad(date.getMinutes());
       const ss = pad(date.getSeconds());
-      const zone = (date.toLocaleTimeString('en-US', { timeZoneName: 'short', hour12: false }).match(/([A-Z]{2,4})$/) || [])[1] || 'UTC';
-      return `${day}${month}${year}_${hh}${mm}${ss}${zone}`;
+      const zone = new Intl.DateTimeFormat('en-US', {
+        timeZoneName: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }).formatToParts(date).find((part) => part.type === 'timeZoneName')?.value || 'UTC';
+
+      return `${day}${month}${year}_${hh}${mm}${ss}${zone.toUpperCase()}`;
     }
     async function loadStatsDialog(){
       if (!el.statsDialog) return;
