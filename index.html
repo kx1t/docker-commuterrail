@@ -223,10 +223,12 @@
     .kpi { border: 1px solid var(--rule); background: #fafbfc; border-radius: 12px; padding: 10px; }
     .kpi-label { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
     .kpi-value { display: block; font-weight: 700; font-size: 22px; margin-top: 6px; }
-    .stats-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
-    .stats-table th, .stats-table td { border-bottom: 1px solid var(--rule); padding: 7px 4px; text-align: left; vertical-align: top; }
+    .stats-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -4px; }
+    .stats-table { width: 100%; min-width: 560px; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
+    .stats-table th, .stats-table td { border-bottom: 1px solid var(--rule); padding: 7px 4px; text-align: left; vertical-align: top; word-break: break-word; overflow-wrap: anywhere; }
     .stats-table th { color: var(--muted); font-weight: 600; }
-    .stats-table th:first-child, .stats-table td:first-child { width: 210px; min-width: 210px; max-width: 210px; }
+    .stats-table th:first-child, .stats-table td:first-child { width: 16%; }
+    .stats-table th:nth-child(2), .stats-table td:nth-child(2) { width: 18%; }
     .stats-table td:first-child { overflow-wrap: anywhere; }
     .stats-meta-row {
       margin-top: 12px;
@@ -267,7 +269,8 @@
       .stats-page { height: 92vh; }
       .stats-header { padding: 14px 14px 12px; }
       .stats-body { padding: 12px 14px 18px; }
-      .stats-table { font-size: 11px; }
+      .stats-table { font-size: 10px; min-width: 500px; }
+      .stats-table th, .stats-table td { padding: 6px 3px; }
       .stats-meta-row {
         font-size: 9px;
         letter-spacing: 0.02em;
@@ -579,17 +582,21 @@
           </section>
           <section class="stats-section">
             <h3>Clients</h3>
-            <table class="stats-table">
-              <thead><tr><th>Client</th><th>User agent</th><th>1m</th><th>1h</th><th>24h</th></tr></thead>
-              <tbody>${clientHtml}</tbody>
-            </table>
+            <div class="stats-table-wrap">
+              <table class="stats-table">
+                <thead><tr><th>Client</th><th>User agent</th><th>1m</th><th>1h</th><th>24h</th></tr></thead>
+                <tbody>${clientHtml}</tbody>
+              </table>
+            </div>
           </section>
           <section class="stats-section">
             <h3>Transit cache activity</h3>
-            <table class="stats-table">
-              <thead><tr><th>Transit</th><th>Endpoint</th><th>Hits 1m/1h/24h</th><th>Miss 1m/1h/24h</th><th>Refresh 1m/1h/24h</th><th>Last Refresh</th><th>Expires in</th></tr></thead>
-              <tbody>${transitHtml}</tbody>
-            </table>
+            <div class="stats-table-wrap">
+              <table class="stats-table">
+                <thead><tr><th>Transit</th><th>Endpoint</th><th>Hits 1m/1h/24h</th><th>Miss 1m/1h/24h</th><th>Refresh 1m/1h/24h</th><th>Last Refresh</th><th>Expires in</th></tr></thead>
+                <tbody>${transitHtml}</tbody>
+              </table>
+            </div>
           </section>
           <div class="stats-meta-row">
             <span class="meta-item">${rows.runtime?.commit ? `<a href="https://github.com/kx1t/docker-commuterrail/commit/${rows.runtime.commit}" target="_blank" rel="noreferrer">commit ${rows.runtime.commit}</a>` : 'commit unknown'}</span>
