@@ -222,7 +222,7 @@
     }
     .kpi { border: 1px solid var(--rule); background: #fafbfc; border-radius: 12px; padding: 10px; }
     .kpi-label { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
-    .kpi-value { display: block; font-weight: 700; font-size: 22px; margin-top: 6px; }
+    .kpi-value { display: block; font-weight: 700; font-size: 16px; line-height: 1.25; margin-top: 6px; overflow-wrap: anywhere; word-break: break-word; }
     .stats-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -4px; }
     .stats-table { width: 100%; min-width: 560px; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
     .stats-table th, .stats-table td { border-bottom: 1px solid var(--rule); padding: 7px 4px; text-align: left; vertical-align: top; word-break: break-word; overflow-wrap: anywhere; }
@@ -554,6 +554,18 @@
       if (secs > 0 || parts.length === 0) parts.push(`${secs}s`);
       return parts.join(' ');
     }
+
+    function formatRelativeAge(timestampSeconds) {
+      if (timestampSeconds === null || timestampSeconds === undefined || timestampSeconds === 'unknown' || timestampSeconds === '') {
+        return 'unknown';
+      }
+      const then = Number(timestampSeconds);
+      const now = Date.now() / 1000;
+      if (!Number.isFinite(then)) {
+        return 'unknown';
+      }
+      return `${formatElapsedRuntime(Math.max(0, now - then))} ago`;
+    }
     async function loadStatsDialog(){
       if (!el.statsDialog) return;
       el.statsBody.innerHTML = '<div class="loading-state">Loading cache diagnostics…</div>';
@@ -598,7 +610,7 @@
           <section class="stats-section">
             <h3>Overview</h3>
             <div class="kpi-grid">
-              <div class="kpi"><span class="kpi-label">Generated</span><span class="kpi-value">${rows.generated_at ? formatStatsTimestamp(rows.generated_at, true) : 'n/a'}</span></div>
+              <div class="kpi"><span class="kpi-label">Generated</span><span class="kpi-value">${rows.generated_at ? formatRelativeAge(rows.generated_at) : 'n/a'}</span></div>
               <div class="kpi"><span class="kpi-label">Clients</span><span class="kpi-value">${clients.length}</span></div>
               <div class="kpi"><span class="kpi-label">Transit records</span><span class="kpi-value">${transits.length}</span></div>
             </div>
