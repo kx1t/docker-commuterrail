@@ -1,4 +1,22 @@
 <!doctype html>
+<!--
+  Copyright 2026 by Ramon F. Kolb, kx1t
+
+  This file is part of docker-commuterrail.
+
+  docker-commuterrail is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  docker-commuterrail is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with docker-commuterrail. If not, see <https://www.gnu.org/licenses/>.
+-->
 <html lang="en">
 <head>
   <script>
@@ -509,7 +527,7 @@
             </table>
           </section>
           <div class="stats-meta-row">
-            ${rows.runtime?.commit ? `commit ${rows.runtime.commit}` : 'commit unknown'} · ${rows.runtime?.build_date && rows.runtime.build_date !== 'unknown' ? `built ${new Date(rows.runtime.build_date).toLocaleString()}` : 'built unknown'} · ${rows.runtime?.up_since ? `up since ${new Date(rows.runtime.up_since * 1000).toLocaleString()}` : 'up since unknown'}
+            ${rows.runtime?.commit ? `<a href="https://github.com/kx1t/docker-commuterrail/commit/${rows.runtime.commit}" target="_blank" rel="noreferrer">commit ${rows.runtime.commit}</a>` : 'commit unknown'} · ${rows.runtime?.build_date && rows.runtime.build_date !== 'unknown' ? `built ${new Date(rows.runtime.build_date).toLocaleString()}` : 'built unknown'} · ${rows.runtime?.up_since ? `up since ${new Date(rows.runtime.up_since * 1000).toLocaleString()}` : 'up since unknown'} · <a href="https://github.com/kx1t/docker-commuterrail" target="_blank" rel="noreferrer">SW Repo</a>
           </div>
         `;
       } catch (error) {

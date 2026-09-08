@@ -1,3 +1,22 @@
+<!--
+Copyright 2026 by Ramon F. Kolb, kx1t
+
+This file is part of docker-commuterrail.
+
+docker-commuterrail is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+docker-commuterrail is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with docker-commuterrail. If not, see <https://www.gnu.org/licenses/>.
+-->
+
 # Fitchburg Line Live Departures
 
 This repository contains the front-end dashboard and a small Dockerized transit cache service for both Paris PRIM and Boston MBTA data. The cache runs on a single port, stores responses in memory, and refreshes data only after a browser request for a specific transit authority within the last 60 seconds. This keeps quota usage low and avoids unnecessary upstream refreshes when no browser is actively using the service.
