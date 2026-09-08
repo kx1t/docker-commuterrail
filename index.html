@@ -545,10 +545,12 @@
       const safeSeconds = Math.max(0, Math.round(totalSeconds));
       const days = Math.floor(safeSeconds / 86400);
       const hours = Math.floor((safeSeconds % 86400) / 3600);
+      const minutes = Math.floor((safeSeconds % 3600) / 60);
       const secs = safeSeconds % 60;
       const parts = [];
       if (days > 0) parts.push(`${days}d`);
       if (hours > 0 || parts.length > 0) parts.push(`${hours}h`);
+      if (minutes > 0 || parts.length > 0) parts.push(`${minutes}m`);
       if (secs > 0 || parts.length === 0) parts.push(`${secs}s`);
       return parts.join(' ');
     }
