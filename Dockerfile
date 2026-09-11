@@ -17,17 +17,12 @@
 
 FROM debian:trixie-slim
 
-ARG GIT_COMMIT=unknown
-ARG BUILD_DATE=unknown
-
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PORT=80 \
     CACHE_TTL_SECONDS=60 \
     HTTP_WORKERS=10 \
-    PRIM_API_KEY="" \
-    GIT_COMMIT=${GIT_COMMIT} \
-    BUILD_DATE=${BUILD_DATE}
+    PRIM_API_KEY=""
 
 WORKDIR /app
 
@@ -38,9 +33,15 @@ RUN apt-get update \
 
 ENV PATH="/opt/venv/bin:$PATH"
 
-COPY app /app/app
-COPY index.html /app/index.html
 COPY README.md /app/README.md
+COPY app/server.py /app/app/server.py
+COPY index.html /app/index.html
+
+ARG GIT_COMMIT=unknown
+ARG BUILD_DATE=unknown
+
+ENV GIT_COMMIT=${GIT_COMMIT} \
+    BUILD_DATE=${BUILD_DATE}
 
 EXPOSE 80
 
