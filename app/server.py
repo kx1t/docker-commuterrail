@@ -32,10 +32,16 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlencode, urlparse
 from urllib.request import Request, urlopen
 
-from app.map_snapshot import (
-    extract_mbta_vehicle_snapshot,
-    unavailable_snapshot,
-)
+try:
+    from app.map_snapshot import (
+        extract_mbta_vehicle_snapshot,
+        unavailable_snapshot,
+    )
+except ModuleNotFoundError:
+    from map_snapshot import (  # type: ignore
+        extract_mbta_vehicle_snapshot,
+        unavailable_snapshot,
+    )
 
 PRIM_API = 'https://prim.iledefrance-mobilites.fr/marketplace'
 MBTA_API = 'https://api-v3.mbta.com'
