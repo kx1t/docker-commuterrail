@@ -21,8 +21,8 @@
 <head>
   <script>
     (function(){
-      const transitMode=(new URLSearchParams(window.location.search).get('transit')||'boston').toLowerCase()==='paris'?'paris':'boston';
-      document.documentElement.dataset.transit = transitMode;
+      const rawTransit = (new URLSearchParams(window.location.search).get('transit') || 'boston').toLowerCase();
+      document.documentElement.dataset.transit = rawTransit === 'paris' ? 'paris' : 'boston';
     })();
   </script>
   <meta charset="utf-8">
@@ -285,6 +285,263 @@
         white-space: normal;
       }
     }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .settings-trigger {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 42px;
+      height: 42px;
+      border: 1px solid var(--ink);
+      border-radius: 5px;
+      background: transparent;
+      color: var(--ink);
+      cursor: pointer;
+      font-size: 20px;
+      line-height: 1;
+    }
+    .settings-trigger:active {
+      transform: translateY(1px);
+    }
+    .provider-static,
+    .line-static,
+    .route-summary-static {
+      display: block;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      cursor: default;
+      text-align: left;
+      text-decoration: none;
+    }
+    .icon-only-refresh {
+      width: 42px;
+      height: 42px;
+      border-radius: 999px;
+      padding: 0;
+      justify-content: center;
+    }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      border: 0;
+      white-space: nowrap;
+    }
+    .settings-dialog {
+      width: min(100vw - 18px, 760px);
+      max-width: 760px;
+      min-height: min(90vh, 760px);
+      border: 0;
+      border-radius: 22px;
+      padding: 0;
+      background: #f5f7f8;
+      box-shadow: 0 24px 60px rgba(16,42,67,0.28);
+    }
+    .settings-dialog::backdrop {
+      background: rgba(16,42,67,0.55);
+    }
+    .settings-content {
+      display: flex;
+      flex-direction: column;
+      height: min(90vh, 760px);
+      padding: 0;
+    }
+    .settings-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 18px 18px 14px;
+      border-bottom: 1px solid var(--rule);
+      background: linear-gradient(180deg, #edf5f1, #f5f7f8);
+    }
+    .settings-header h2 {
+      margin: 0;
+      font-size: clamp(22px, 5vw, 32px);
+      letter-spacing: -0.04em;
+    }
+    .settings-main {
+      overflow: auto;
+      padding: 16px 18px 18px;
+    }
+    .settings-copy {
+      margin-bottom: 16px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .settings-grid {
+      display: grid;
+      gap: 12px;
+    }
+    .settings-field {
+      display: grid;
+      gap: 7px;
+    }
+    .settings-field label {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .settings-field select {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid var(--rule);
+      border-radius: 5px;
+      color: var(--ink);
+      background: white;
+      font: inherit;
+    }
+    .settings-shortcuts {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .settings-shortcuts button {
+      border: 1px solid var(--rule);
+      background: white;
+      color: var(--ink);
+      border-radius: 10px;
+      padding: 10px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .settings-actions {
+      margin-top: 18px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+    .settings-actions button {
+      border: 1px solid var(--ink);
+      border-radius: 5px;
+      padding: 10px 14px;
+      color: var(--ink);
+      background: transparent;
+      cursor: pointer;
+    }
+    .settings-actions .save-settings {
+      color: #fff;
+      background: var(--ink);
+    }
+    .about-dialog {
+      width: min(100vw - 18px, 760px);
+      max-width: 760px;
+      min-height: min(90vh, 760px);
+      border: 0;
+      border-radius: 22px;
+      padding: 0;
+      background: #f5f7f8;
+      box-shadow: 0 24px 60px rgba(16,42,67,0.28);
+    }
+    .about-dialog::backdrop {
+      background: rgba(16,42,67,0.55);
+    }
+    .about-page {
+      display: flex;
+      flex-direction: column;
+      height: min(90vh, 760px);
+      font-family: var(--sans);
+      color: var(--ink);
+    }
+    .about-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 18px 18px 14px;
+      border-bottom: 1px solid var(--rule);
+      background: linear-gradient(180deg, #edf5f1, #f5f7f8);
+    }
+    .about-header h2 {
+      margin: 0;
+      font-size: clamp(22px, 5vw, 32px);
+      letter-spacing: -0.04em;
+    }
+    .close-about {
+      border: 1px solid var(--rule);
+      background: white;
+      color: var(--ink);
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .about-body {
+      overflow: auto;
+      padding: 16px 18px 22px;
+      line-height: 1.6;
+      font-size: 15px;
+    }
+    .about-body h3 {
+      margin: 0 0 10px;
+      font-size: clamp(18px, 4vw, 24px);
+      letter-spacing: -0.04em;
+    }
+    .about-body h4 {
+      margin: 18px 0 8px;
+      font-size: clamp(15px, 3.5vw, 20px);
+      letter-spacing: -0.03em;
+    }
+    .about-body p {
+      margin: 0 0 12px;
+    }
+    .about-body ul {
+      margin: 0 0 14px 18px;
+      padding: 0;
+    }
+    .about-body li {
+      margin-bottom: 8px;
+    }
+    .about-body a {
+      color: var(--ink);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      text-decoration-color: var(--orange);
+      word-break: break-word;
+    }
+    @media (max-width: 680px) {
+      .header-actions {
+        gap: 6px;
+      }
+      .refresh-button {
+        width: 40px;
+        height: 40px;
+        justify-content: center;
+        padding: 0;
+      }
+      .refresh-button span:last-child {
+        display: none;
+      }
+      .settings-trigger {
+        width: 40px;
+        height: 40px;
+      }
+      .settings-shortcuts {
+        grid-template-columns: 1fr;
+      }
+      .settings-dialog,
+      .about-dialog {
+        width: calc(100vw - 12px);
+        min-height: 92vh;
+      }
+      .settings-content,
+      .about-page {
+        height: 92vh;
+      }
+    }
   </style>
   <title>Transit departures</title>
 </head>
@@ -294,13 +551,16 @@
       <div class="brand-lockup">
         <div class="line-mark" id="line-mark" aria-hidden="true">F</div>
         <div>
-            <button class="eyebrow provider-toggle" id="provider-label" type="button" aria-label="Switch transit authority">MBTA commuter rail</button>
-          <button class="line-selector" id="line-selector" type="button" aria-label="Choose commuter rail line"><span class="line-title" id="line-title">Fitchburg Line</span></button>
+          <p class="eyebrow provider-static" id="provider-label">MBTA commuter rail</p>
+          <p class="line-static"><span class="line-title" id="line-title">Fitchburg Line</span></p>
         </div>
       </div>
-      <button class="refresh-button" id="refresh-button" type="button" aria-label="Refresh departures">
-        <span class="refresh-icon" aria-hidden="true">↻</span><span>Refresh</span>
-      </button>
+      <div class="header-actions">
+        <button class="refresh-button" id="refresh-button" type="button" aria-label="Refresh departures">
+          <span class="refresh-icon" aria-hidden="true">↻</span><span>Refresh</span>
+        </button>
+        <button class="settings-trigger" id="settings-button" type="button" aria-label="Open settings">⚙</button>
+      </div>
     </header>
 
     <section class="status-strip" aria-live="polite">
@@ -310,9 +570,9 @@
     </section>
 
     <section class="route-intro">
-      <button class="route-summary eyebrow" id="route-summary" type="button" aria-label="Choose stations">Belmont ↔ North Station</button>
+      <p class="route-summary-static eyebrow" id="route-summary">Belmont ↔ North Station</p>
       <p class="intro-copy">Live departures, predicted times, and service notes in one glance</p>
-      <p class="intro-copy">Click the line name at the top to change lines</p>
+      <p class="intro-copy">Open settings with the cogwheel to change authority, line, and stations</p>
     </section>
 
     <div class="departure-grid">
@@ -348,7 +608,7 @@
       <div class="stats-header">
         <h2>Cache diagnostics</h2>
         <div class="stats-header-actions">
-          <button type="button" class="refresh-stats" id="stats-refresh">Refresh</button>
+          <button type="button" class="refresh-button icon-only-refresh" id="stats-refresh" aria-label="Refresh statistics"><span class="refresh-icon" aria-hidden="true">↻</span><span class="sr-only">Refresh</span></button>
           <button type="button" class="close-stats" id="stats-close">Close</button>
         </div>
       </div>
@@ -366,8 +626,8 @@
       <div class="tips-body">
         <h3>Tips and Hints</h3>
         <ul>
-          <li>Click on the "MBTA Commuter Rail" or "Île de France Mobilites" title to switch between transit systems</li>
-          <li>Click the currently selected line or the title with the two stations to change these</li>
+          <li>Use the cogwheel icon in the top-right to choose transit authority, line, and stations.</li>
+          <li>Use the refresh icon to force an immediate departure refresh.</li>
         </ul>
 
         <h3>Install this as a Web App on your iPhone</h3>
@@ -398,53 +658,213 @@
   </dialog>
   <dialog class="settings-dialog" id="settings-dialog">
     <form class="settings-content" id="settings-form" method="dialog">
-      <h2>Choose your route</h2>
-      <p class="settings-copy">Pick a transport line, then choose two stations.</p>
-      <div class="settings-field" id="line-field"><label for="line-select">Transport Line</label><select id="line-select"></select></div>
-      <div class="settings-field" id="endpoint-field"><label for="endpoint-select">Between station</label><select id="endpoint-select"></select></div>
-      <div class="settings-field" id="remote-field"><label for="remote-select">And station</label><select id="remote-select"></select></div>
-      <div class="settings-actions"><button type="button" id="cancel-settings">Cancel</button><button class="save-settings" type="submit">Save route</button></div>
+      <div class="settings-header">
+        <h2>Settings</h2>
+        <button type="button" class="close-tips" id="cancel-settings">Close</button>
+      </div>
+      <div class="settings-main">
+        <p class="settings-copy">Select your transit authority, then choose line and stations.</p>
+        <div class="settings-grid">
+          <div class="settings-field" id="authority-field"><label for="authority-select">Transit Authority</label><select id="authority-select"></select></div>
+          <div class="settings-field" id="line-field"><label for="line-select">Line</label><select id="line-select"></select></div>
+          <div class="settings-field" id="endpoint-field"><label for="endpoint-select">Origin stop</label><select id="endpoint-select"></select></div>
+          <div class="settings-field" id="remote-field"><label for="remote-select">Destination stop</label><select id="remote-select"></select></div>
+        </div>
+        <div class="settings-shortcuts">
+          <button type="button" id="settings-open-stats">Show stats</button>
+          <button type="button" id="settings-open-about">About</button>
+          <button type="button" id="settings-open-tips">Hints</button>
+        </div>
+        <div class="settings-actions">
+          <button class="save-settings" type="submit">Save settings</button>
+        </div>
+      </div>
     </form>
   </dialog>
+  <dialog id="about-dialog" class="about-dialog" aria-labelledby="about-title">
+    <div class="about-page">
+      <div class="about-header">
+        <h2 id="about-title">About &amp; Privacy</h2>
+        <button type="button" class="close-about" id="about-close">Close</button>
+      </div>
+      <div class="about-body">
+        <p>This application is an independent digital tool designed to help commuters track public transit schedules, route definitions, and real-time feeds across multiple municipal networks.</p>
+        <p>The application is (C) 2026 by Ramon F. Kolb, kx1t.</p>
+        <hr>
+        <h3>Open Source &amp; Codebase License</h3>
+        <p>This project believes in open, accessible technology and transparent software architecture.</p>
+        <ul>
+          <li><strong>Open Source Codebase:</strong> The <a href="https://github.com/kx1t/docker-commuterrail" target="_blank" rel="noreferrer">application and its backend software</a> are entirely open-source.</li>
+          <li><strong>Software License:</strong> The source code is officially licensed under the <a href="https://www.gnu.org/licenses/" target="_blank" rel="noreferrer">GNU General Public License</a>, version 3 or later (GPLv3+). This guarantees your right to freely run, study, share, and modify the software.</li>
+        </ul>
+        <h3>Privacy &amp; Infrastructure Security</h3>
+        <p>We believe in complete privacy. This platform is built from the ground up to protect your data with zero tracking.</p>
+        <ul>
+          <li><strong>Zero Personal Tracking:</strong> This application does not collect, track, buy, or sell your personal data. No third-party cookies, tracking pixels, or external analytics integrations are used.</li>
+          <li><strong>Local Preference Memory:</strong> To enhance your user experience, your preferences (such as your last selected transit authority, lines, and stops) are saved directly inside your browser's local memory (<code>localStorage</code>). This data is entirely client-side, never leaves your device, and can be cleared at any time by wiping your browser's site data or history.</li>
+          <li><strong>Transient Infrastructure Protection:</strong> Inbound network connections are analyzed dynamically in volatile server memory solely to mitigate cyber attacks, filter spam, and block automated malicious bots. These temporary traffic streams are evaluated in real-time for infrastructure security purposes and are never logged, written to persistent storage, or retained.</li>
+        </ul>
+        <h3>Third-Party Transit Data Disclaimers &amp; Licensing</h3>
+        <p>This application integrates public transit schedules, route definitions, geographic geometries, and real-time feeds provided by independent external municipal authorities. By using this service, you acknowledge and agree to the following provisions required by the data providers:</p>
+        <h4>Massachusetts Bay Transportation Authority (MBTA)</h4>
+        <ul>
+          <li><strong>Data Provider:</strong> This application incorporates transit data, including scheduling, route, and real-time information, provided by the Massachusetts Bay Transportation Authority (MBTA) and the Massachusetts Department of Transportation (MassDOT).</li>
+          <li><strong>License Agreement:</strong> This data is used under the express permission of the MassDOT Developers License Agreement.</li>
+          <li><strong>Warranty &amp; Liability Disclaimer:</strong> All MBTA/MassDOT data is provided on an "as-is" and "as-available" basis without warranties of any kind, either express or implied. The developer and MassDOT/MBTA expressly disclaim any liability for inaccuracies, schedule changes, service delays, or any damages resulting from the use of this data.</li>
+          <li><strong>Trademark Notice:</strong> This application is an independent development. It is not endorsed, sponsored, affiliated with, or officially sanctioned by MassDOT or the MBTA. All proprietary logos, trademarks, and branding (including the circular "T" logo) remain the sole property of their respective owners.</li>
+        </ul>
+        <h4>Ile-de-France Mobilites (Paris)</h4>
+        <ul>
+          <li><strong>Source des donnees / Data Source:</strong> Cet applicatif utilise les donnees de transport et d'offre horaire fournies par Ile-de-France Mobilites. / This application incorporates transit and timetable scheduling data provided by Ile-de-France Mobilites.</li>
+          <li><strong>Licence de Mobilite:</strong> Ces donnees sont exploitees conformement aux termes de la Licence de Mobilite (Loi d'orientation des mobilites - LOM). / This data is utilized in full compliance with the French Mobility License framework ensuring free, equitable consumer access to public timetables.</li>
+          <li><strong>Limitation de responsabilite / Liability:</strong> L'exactitude, la ponctualite et la completude des donnees dependent entierement de l'emetteur public. Le developpeur decline toute responsabilite en cas de dysfonctionnement du flux ou d'erreur d'itineraire. / Data accuracy and availability are dependent on the public issuer. The developer disclaims all liability for feed disruptions or routing inaccuracies.</li>
+          <li><strong>Mentions ODbL (Geographie):</strong> Les traces geographiques complementaires et donnees cartographiques peuvent inclure des informations sous licence Open Database License (ODbL).</li>
+        </ul>
+        <div class="stats-meta-row" id="about-meta-row">
+          <span class="meta-item">commit unknown</span>
+          <span class="meta-item">built unknown</span>
+          <span class="meta-item">up since unknown</span>
+          <span class="meta-item"><a href="https://github.com/kx1t/docker-commuterrail" target="_blank" rel="noreferrer">SW Repo</a></span>
+        </div>
+      </div>
+    </div>
+  </dialog>
   <script>
-    (function applyTransitDefaults(){
-      const transitMode=(new URLSearchParams(location.search).get('transit')||'boston').toLowerCase()==='paris'?'paris':'boston';
-      const defaults = transitMode === 'paris' ? {
-        provider: 'Île-de-France Mobilités',
-        lineMark: '9',
-        lineTitle: 'Metro line 9',
-        routeSummary: 'Pont de Sèvres ↔ Mairie de Montreuil',
-        inboundTitle: 'Pont de Sèvres <span>to</span> Mairie de Montreuil',
-        outboundTitle: 'Mairie de Montreuil <span>to</span> Pont de Sèvres',
-        footer: 'Data from Île-de-France Mobilités'
-      } : {
-        provider: 'MBTA commuter rail',
-        lineMark: 'F',
-        lineTitle: 'Fitchburg Line',
-        routeSummary: 'Belmont ↔ North Station',
-        inboundTitle: 'Belmont <span>to</span> North Station',
-        outboundTitle: 'North Station <span>to</span> Belmont',
-        footer: 'Data from MBTA'
-      };
-      const provider = document.getElementById('provider-label');
-      const providerFooter = document.getElementById('provider-footer');
-      const lineMark = document.getElementById('line-mark');
-      const lineTitle = document.getElementById('line-title');
-      const routeSummary = document.getElementById('route-summary');
-      const inboundTitle = document.getElementById('inbound-title');
-      const outboundTitle = document.getElementById('outbound-title');
-      if (provider) provider.textContent = defaults.provider;
-      if (providerFooter) providerFooter.textContent = defaults.footer;
-      if (lineMark) lineMark.textContent = defaults.lineMark;
-      if (lineTitle) lineTitle.textContent = defaults.lineTitle;
-      if (routeSummary) routeSummary.textContent = defaults.routeSummary;
-      if (inboundTitle) inboundTitle.innerHTML = defaults.inboundTitle;
-      if (outboundTitle) outboundTitle.innerHTML = defaults.outboundTitle;
-      document.documentElement.dataset.transit = transitMode;
-    })();
-  </script>
-  <script>
-    const CACHE_API='api/cache', DEFAULT_ROUTE='CR-Fitchburg', DEFAULT_REMOTE='place-FR-0064', DEFAULT_ENDPOINT='place-north', REFRESH=120000, STORAGE_KEY='transit-settings';
+    const CACHE_API='api/cache';
+    const REFRESH=120000;
+    const SETTINGS_PREFIX='transit-settings';
+    const LEGACY_SETTINGS_KEY='fitchburg-rail-settings';
+    const LAST_BOSTON_MODE_KEY='transit-last-boston-mode';
+    const BOSTON_MODES=new Set(['boston-commuterrail','boston-subway','boston-bus']);
+    const PARIS_LINES=[...Array(14)].map((_,i)=>({id:`metro-${i+1}`,name:`Metro line ${i+1}`,mode:'metro',lineRef:i===8?'STIF:Line::C01379:':null})).concat(['A','B','C','D','E'].map((id)=>({id:`rer-${id}`,name:`RER ${id}`,mode:'rer',lineRef:null})));
+    const TRANSIT_PROFILES={
+      paris:{provider:'Île-de-France Mobilités',footer:'Data from Île-de-France Mobilités',defaultRouteId:'metro-9',defaultEndpointId:'pont-de-sevres',defaultRemoteId:'saint-ambroise',routeType:null,routeLabel:'Paris line'},
+      'boston-commuterrail':{provider:'MBTA commuter rail',footer:'Data from MBTA',defaultRouteId:'CR-Fitchburg',defaultEndpointId:'place-north',defaultRemoteId:'place-FR-0064',routeType:'2',routeLabel:'Commuter Rail'},
+      'boston-subway':{provider:'MBTA subway',footer:'Data from MBTA',defaultRouteId:'Red',defaultEndpointId:'place-alfcl',defaultRemoteId:'place-sstat',routeType:'0,1',routeLabel:'Subway line'},
+      'boston-bus':{provider:'MBTA bus',footer:'Data from MBTA',defaultRouteId:'1',defaultEndpointId:'place-harsq',defaultRemoteId:'place-dudly',routeType:'3',routeLabel:'Bus route'},
+    };
+
+    function canonicalTransit(value){
+      const candidate=(value||'').trim().toLowerCase();
+      if(!candidate||candidate==='boston') return 'boston';
+      if(candidate==='boston-commuterrair') return 'boston-commuterrail';
+      if(candidate==='paris'||BOSTON_MODES.has(candidate)) return candidate;
+      return candidate;
+    }
+    function isParisTransit(transit){
+      return canonicalTransit(transit)==='paris';
+    }
+    function isBostonTransit(transit){
+      return BOSTON_MODES.has(canonicalTransit(transit));
+    }
+    function resolveInitialTransit(){
+      const raw=canonicalTransit(new URLSearchParams(location.search).get('transit')||'boston');
+      if(raw==='boston'){
+        const remembered=canonicalTransit(localStorage.getItem(LAST_BOSTON_MODE_KEY)||'');
+        return isBostonTransit(remembered)?remembered:'boston-commuterrail';
+      }
+      if(isBostonTransit(raw)){
+        localStorage.setItem(LAST_BOSTON_MODE_KEY,raw);
+        return raw;
+      }
+      return raw==='paris'?'paris':'boston-commuterrail';
+    }
+    function transitTheme(transit){
+      return isParisTransit(transit)?'paris':'boston';
+    }
+    function profileForTransit(transit){
+      return TRANSIT_PROFILES[canonicalTransit(transit)]||TRANSIT_PROFILES['boston-commuterrail'];
+    }
+    function settingsStorageKey(transit){
+      return `${SETTINGS_PREFIX}-${canonicalTransit(transit)}`;
+    }
+    function readSavedSettings(transit){
+      const mode=canonicalTransit(transit);
+      try{
+        const direct=localStorage.getItem(settingsStorageKey(mode));
+        if(direct){
+          return JSON.parse(direct)||{};
+        }
+      }catch(error){
+        console.warn('Could not read saved route settings',error);
+      }
+      if(mode==='boston-commuterrail'){
+        try{
+          const legacy=localStorage.getItem(LEGACY_SETTINGS_KEY);
+          if(legacy){
+            return JSON.parse(legacy)||{};
+          }
+        }catch(error){
+          console.warn('Could not read legacy route settings',error);
+        }
+      }
+      return {};
+    }
+    function writeSavedSettings(transit,settings){
+      const mode=canonicalTransit(transit);
+      const payload=JSON.stringify({routeId:settings.routeId,remoteId:settings.remoteId,endpointId:settings.endpointId});
+      localStorage.setItem(settingsStorageKey(mode),payload);
+      if(mode==='boston-commuterrail'){
+        localStorage.setItem(LEGACY_SETTINGS_KEY,payload);
+      }
+      if(isBostonTransit(mode)){
+        localStorage.setItem(LAST_BOSTON_MODE_KEY,mode);
+      }
+    }
+
+    const el={
+      inbound:document.querySelector('#inbound-trains'),
+      outbound:document.querySelector('#outbound-trains'),
+      refresh:document.querySelector('#refresh-button'),
+      settingsButton:document.querySelector('#settings-button'),
+      status:document.querySelector('#status-message'),
+      dot:document.querySelector('#status-dot'),
+      updated:document.querySelector('#updated-at'),
+      lineMark:document.querySelector('#line-mark'),
+      lineTitle:document.querySelector('#line-title'),
+      providerLabel:document.querySelector('#provider-label'),
+      providerFooter:document.querySelector('#provider-footer'),
+      routeSummary:document.querySelector('#route-summary'),
+      inboundTitle:document.querySelector('#inbound-title'),
+      outboundTitle:document.querySelector('#outbound-title'),
+      dialog:document.querySelector('#settings-dialog'),
+      form:document.querySelector('#settings-form'),
+      authoritySelect:document.querySelector('#authority-select'),
+      lineSelect:document.querySelector('#line-select'),
+      endpointSelect:document.querySelector('#endpoint-select'),
+      remoteSelect:document.querySelector('#remote-select'),
+      cancelSettings:document.querySelector('#cancel-settings'),
+      settingsOpenStats:document.querySelector('#settings-open-stats'),
+      settingsOpenAbout:document.querySelector('#settings-open-about'),
+      settingsOpenTips:document.querySelector('#settings-open-tips'),
+      statsDialog:document.querySelector('#stats-dialog'),
+      statsBody:document.querySelector('#stats-body'),
+      statsClose:document.querySelector('#stats-close'),
+      statsRefresh:document.querySelector('#stats-refresh'),
+      tipsDialog:document.querySelector('#tips-dialog'),
+      tipsClose:document.querySelector('#tips-close'),
+      helpLink:document.querySelector('#help-link'),
+      aboutDialog:document.querySelector('#about-dialog'),
+      aboutClose:document.querySelector('#about-close'),
+      aboutMetaRow:document.querySelector('#about-meta-row'),
+    };
+
+    let currentTransit=resolveInitialTransit();
+    let routes=[];
+    let routeStops=[];
+    let selectedRouteId='';
+    let selectedRemoteId='';
+    let selectedEndpointId='';
+    let parisUsedEstimatedFallback=false;
+    let loadInFlight=false;
+
+    let settingsTransit=currentTransit;
+    let settingsRoutes=[];
+    let settingsStops=[];
+    let settingsRouteId='';
+    let settingsRemoteId='';
+    let settingsEndpointId='';
+
     function setStatusMessage(text, tone='info'){
       if (!text) return;
       el.status.textContent = text;
@@ -456,37 +876,38 @@
         el.dot.className = 'status-dot connected';
       }
     }
-    const transitMode=(new URLSearchParams(location.search).get('transit')||'boston').toLowerCase()==='paris'?'paris':'boston';
-    const PARIS_LINES=[...Array(14)].map((_,i)=>({id:`metro-${i+1}`,name:`Metro line ${i+1}`,mode:'metro',lineRef:i===8?'STIF:Line::C01379:':null})).concat(['A','B','C','D','E'].map((id)=>({id:`rer-${id}`,name:`RER ${id}`,mode:'rer',lineRef:null})));
-    const savedSettings=(()=>{try{const raw=localStorage.getItem(`${STORAGE_KEY}-${transitMode}`)||localStorage.getItem('fitchburg-rail-settings')||'{}';return JSON.parse(raw)||{}}catch(error){console.warn('Could not read saved route settings',error);return {}}})();
-    const el={inbound:document.querySelector('#inbound-trains'),outbound:document.querySelector('#outbound-trains'),refresh:document.querySelector('#refresh-button'),status:document.querySelector('#status-message'),dot:document.querySelector('#status-dot'),updated:document.querySelector('#updated-at'),lineMark:document.querySelector('#line-mark'),lineSelector:document.querySelector('#line-selector'),lineTitle:document.querySelector('#line-title'),providerLabel:document.querySelector('#provider-label'),providerFooter:document.querySelector('#provider-footer'),routeSummary:document.querySelector('#route-summary'),inboundTitle:document.querySelector('#inbound-title'),outboundTitle:document.querySelector('#outbound-title'),dialog:document.querySelector('#settings-dialog'),statsDialog:document.querySelector('#stats-dialog'),statsBody:document.querySelector('#stats-body'),statsClose:document.querySelector('#stats-close'),statsRefresh:document.querySelector('#stats-refresh'),form:document.querySelector('#settings-form'),lineField:document.querySelector('#line-field'),endpointField:document.querySelector('#endpoint-field'),remoteField:document.querySelector('#remote-field'),lineSelect:document.querySelector('#line-select'),endpointSelect:document.querySelector('#endpoint-select'),remoteSelect:document.querySelector('#remote-select'),cancelSettings:document.querySelector('#cancel-settings')};
-    let routes=transitMode==='paris'?PARIS_LINES:[],routeStops=[],selectedRouteId=savedSettings.routeId|| (transitMode==='paris'?'metro-9':DEFAULT_ROUTE),selectedRemoteId=savedSettings.remoteId|| (transitMode==='paris'?'saint-ambroise':DEFAULT_REMOTE),selectedEndpointId=savedSettings.endpointId|| (transitMode==='paris'?'pont-de-sevres':DEFAULT_ENDPOINT);
+
     const records=(r)=>Array.isArray(r.data)?r.data:[];
     const trip=(r)=>r.relationships?.trip?.data?.id||r.attributes?.trip_id;
     const time=(r)=>r.attributes?.departure_time||r.attributes?.arrival_time;
     const escapeHtml=(value)=>String(value).replace(/[&<>"']/g,(character)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
     const displayTime=(v)=>new Intl.DateTimeFormat(undefined,{hour:'numeric',minute:'2-digit'}).format(new Date(v));
     const windowParams=()=>{const n=new Date(),earlier=new Date(n.getTime()-24*3600000),later=new Date(n.getTime()+18*3600000);return{min_time:earlier.toISOString(),max_time:later.toISOString(),'page[limit]':'100'}};
-    const cacheRequest=async(transit,endpoint,query={})=>{const params=new URLSearchParams({transit, path:endpoint, query:JSON.stringify(query)});const baseUrl = window.location.pathname.endsWith('/') ? window.location.href : `${window.location.href}/`;const response=await fetch(new URL(`${CACHE_API}?${params.toString()}`, baseUrl));const payload=await response.json().catch(()=>({}));if(payload?.status==='warning'&&payload?.message){setStatusMessage(payload.message,'warning');return payload.data||{}}if(payload?.status==='error'){const message=payload.message||'Error: transit data is unavailable.';setStatusMessage(message,'error');throw Error(message)}if(!response.ok){const message=`Cache API returned ${response.status}`;setStatusMessage(message,'error');throw Error(message)}return payload.data||{}}
-    async function mbta(path,query){return cacheRequest('boston',path,query||{})}
+    const cacheRequest=async(transit,endpoint,query={})=>{const params=new URLSearchParams({transit:canonicalTransit(transit),path:endpoint,query:JSON.stringify(query)});const baseUrl=window.location.pathname.endsWith('/')?window.location.href:`${window.location.href}/`;const response=await fetch(new URL(`${CACHE_API}?${params.toString()}`,baseUrl));const payload=await response.json().catch(()=>({}));if(payload?.status==='warning'&&payload?.message){setStatusMessage(payload.message,'warning');return payload.data||{}}if(payload?.status==='error'){const message=payload.message||'Error: transit data is unavailable.';setStatusMessage(message,'error');throw Error(message)}if(!response.ok){const message=`Cache API returned ${response.status}`;setStatusMessage(message,'error');throw Error(message)}return payload.data||{}};
+    async function mbta(path,query,transitOverride=currentTransit){return cacheRequest(canonicalTransit(transitOverride),path,query||{})}
     const sleep=(ms)=>new Promise((resolve)=>setTimeout(resolve,ms));
-    async function prim(path,query={},attempt=0){return cacheRequest('paris',path,query||{})}
-    const routeById=()=>routes.find((route)=>route.id===selectedRouteId)||routes.find((route)=>route.id===DEFAULT_ROUTE)||routes[0];
-    const stopName=(stop)=>transitMode==='paris'?(stop?.name||stop?.id||'Station'):stop?.attributes?.name||stop?.id||'Station';
-    let parisUsedEstimatedFallback=false;
+    async function prim(path,query={}){return cacheRequest('paris',path,query||{})}
+    const routeById=()=>{const profile=profileForTransit(currentTransit);return routes.find((route)=>route.id===selectedRouteId)||routes.find((route)=>route.id===profile.defaultRouteId)||routes[0]};
+    const stopName=(stop,transit=currentTransit)=>isParisTransit(transit)?(stop?.name||stop?.id||'Station'):stop?.attributes?.name||stop?.id||'Station';
     const stationById=(stationId)=>routeStops.find((station)=>station.id===stationId);
     const selectedStations=()=>[stationById(selectedEndpointId),stationById(selectedRemoteId)];
-    function orderedStations(stations){const copy=[...stations];if(transitMode==='paris'){const longitudes=copy.map((station)=>Number(station?.lon??station?.pointgeo?.lon??station?.stopLon??station?.stop_lon)).filter(Number.isFinite),latitudes=copy.map((station)=>Number(station?.lat??station?.pointgeo?.lat??station?.stopLat??station?.stop_lat)).filter(Number.isFinite),lonRange=longitudes.length?Math.max(...longitudes)-Math.min(...longitudes):0,latRange=latitudes.length?Math.max(...latitudes)-Math.min(...latitudes):0,axis=lonRange>=latRange?'lon':'lat';return copy.sort((a,b)=>(Number(a?.[axis]??a?.pointgeo?.[axis]??0)-Number(b?.[axis]??b?.pointgeo?.[axis]??0))||stopName(a).localeCompare(stopName(b),'fr'))}return copy}
+    function orderedStations(stations,transit=currentTransit){const copy=[...stations];if(isParisTransit(transit)){const longitudes=copy.map((station)=>Number(station?.lon??station?.pointgeo?.lon??station?.stopLon??station?.stop_lon)).filter(Number.isFinite),latitudes=copy.map((station)=>Number(station?.lat??station?.pointgeo?.lat??station?.stopLat??station?.stop_lat)).filter(Number.isFinite),lonRange=longitudes.length?Math.max(...longitudes)-Math.min(...longitudes):0,latRange=latitudes.length?Math.max(...latitudes)-Math.min(...latitudes):0,axis=lonRange>=latRange?'lon':'lat';return copy.sort((a,b)=>(Number(a?.[axis]??a?.pointgeo?.[axis]??0)-Number(b?.[axis]??b?.pointgeo?.[axis]??0))||stopName(a,transit).localeCompare(stopName(b,transit),'fr'))}return copy}
     function lineDefaults(stations){const ordered=orderedStations(stations),first=ordered[0]||null,second=ordered.at(-1)||first;return[first,second]}
     function resolvedParisEndpoint(originStation,directionStation){const ordered=orderedStations(routeStops),originIndex=ordered.findIndex((station)=>station.id===originStation?.id),directionIndex=ordered.findIndex((station)=>station.id===directionStation?.id);if(originIndex===-1||directionIndex===-1)return directionStation;return originIndex<=directionIndex?ordered.at(-1)||directionStation:ordered[0]||directionStation}
     function syncStationSelection(preferDefaults=false){if(!routeStops.length){selectedEndpointId='';selectedRemoteId='';return}const[defaultFirst,defaultSecond]=lineDefaults(routeStops);if(preferDefaults||!routeStops.some((station)=>station.id===selectedEndpointId)){selectedEndpointId=defaultFirst?.id||routeStops[0]?.id||''}if(preferDefaults||!routeStops.some((station)=>station.id===selectedRemoteId)||selectedRemoteId===selectedEndpointId){selectedRemoteId=defaultSecond?.id||routeStops.find((station)=>station.id!==selectedEndpointId)?.id||selectedEndpointId}if(selectedRemoteId===selectedEndpointId&&routeStops.length>1){selectedRemoteId=routeStops.find((station)=>station.id!==selectedEndpointId)?.id||selectedRemoteId}}
-    function updateRouteText(){const route=routeById(),stationA=stationById(selectedEndpointId),stationB=stationById(selectedRemoteId),lineName=transitMode==='paris'?route?.name||'Paris line':route?.attributes?.long_name||'Commuter Rail',stationAName=stopName(stationA),stationBName=stopName(stationB);el.lineMark.textContent=lineName.trim().replace(/^(Metro line|RER)\s*/i,'').charAt(0).toUpperCase();el.lineTitle.textContent=lineName;el.providerLabel.textContent=transitMode==='paris'?'Île-de-France Mobilités':'MBTA commuter rail';el.providerFooter.textContent=transitMode==='paris'?'Data from Île-de-France Mobilités':'Data from MBTA';el.routeSummary.textContent=`${stationAName} ↔ ${stationBName}`;el.inboundTitle.innerHTML=`${stationAName} <span>to</span> ${stationBName}`;el.outboundTitle.innerHTML=`${stationBName} <span>to</span> ${stationAName}`}
-    function populateStationOptions(){const stations=routeStops;if(!stations.some((station)=>station.id===selectedEndpointId)){selectedEndpointId=lineDefaults(stations)[0]?.id||stations[0]?.id||''}if(!stations.some((station)=>station.id===selectedRemoteId)||selectedRemoteId===selectedEndpointId){selectedRemoteId=lineDefaults(stations)[1]?.id||stations.find((station)=>station.id!==selectedEndpointId)?.id||selectedEndpointId}el.endpointSelect.innerHTML=stations.map((station)=>`<option value="${station.id}">${stopName(station)}</option>`).join('');el.endpointSelect.value=selectedEndpointId;el.remoteSelect.innerHTML=stations.map((station)=>`<option value="${station.id}">${stopName(station)}</option>`).join('');el.remoteSelect.value=selectedRemoteId;updateRouteText()}
-    async function prepareRoute(routeId,preferDefault){selectedRouteId=routeId;routeStops=transitMode==='paris'?await parisStops(routeById()):records(await mbta('/stops',{'filter[route]':selectedRouteId}));if(!routeStops.length)throw Error('No stations found');syncStationSelection(preferDefault);populateStationOptions()}
-    function populateLineOptions(){el.lineSelect.innerHTML=routes.map((route)=>`<option value="${route.id}">${transitMode==='paris'?route.name:route.attributes.long_name}</option>`).join('');el.lineSelect.value=selectedRouteId}
+    function routeLabel(route,transit=currentTransit){if(isParisTransit(transit))return route?.name||profileForTransit(transit).routeLabel;return route?.attributes?.long_name||route?.id||profileForTransit(transit).routeLabel}
+    function updateRouteText(){const route=routeById(),stationA=stationById(selectedEndpointId),stationB=stationById(selectedRemoteId),lineName=routeLabel(route,currentTransit),stationAName=stopName(stationA,currentTransit),stationBName=stopName(stationB,currentTransit),profile=profileForTransit(currentTransit);el.lineMark.textContent=lineName.trim().replace(/^(Metro line|RER|MBTA)\s*/i,'').charAt(0).toUpperCase()||'T';el.lineTitle.textContent=lineName;el.providerLabel.textContent=profile.provider;el.providerFooter.textContent=profile.footer;el.routeSummary.textContent=`${stationAName} ↔ ${stationBName}`;el.inboundTitle.innerHTML=`${stationAName} <span>to</span> ${stationBName}`;el.outboundTitle.innerHTML=`${stationBName} <span>to</span> ${stationAName}`;document.documentElement.dataset.transit=transitTheme(currentTransit)}
+    async function loadStopsForRoute(transit,routeId){if(isParisTransit(transit)){const route=settingsRoutes.find((item)=>item.id===routeId)||routes.find((item)=>item.id===routeId)||{id:routeId};return parisStops(route)}return records(await mbta('/stops',{'filter[route]':routeId},transit))}
+    async function prepareRoute(routeId,preferDefault){selectedRouteId=routeId;routeStops=await loadStopsForRoute(currentTransit,selectedRouteId);if(!routeStops.length)throw Error('No stations found');syncStationSelection(preferDefault);updateRouteText()}
+    function loadTransitSelectionFromStorage(transit){const profile=profileForTransit(transit),saved=readSavedSettings(transit);selectedRouteId=saved.routeId||profile.defaultRouteId||'';selectedRemoteId=saved.remoteId||profile.defaultRemoteId||'';selectedEndpointId=saved.endpointId||profile.defaultEndpointId||''}
+    function populateSettingsAuthorityOptions(){el.authoritySelect.innerHTML=Object.entries(TRANSIT_PROFILES).map(([value,profile])=>`<option value="${value}">${profile.provider}</option>`).join('');el.authoritySelect.value=settingsTransit}
+    function populateSettingsLineOptions(){el.lineSelect.innerHTML=settingsRoutes.map((route)=>`<option value="${route.id}">${routeLabel(route,settingsTransit)}</option>`).join('');el.lineSelect.value=settingsRouteId}
+    function populateSettingsStopOptions(){el.endpointSelect.innerHTML=settingsStops.map((station)=>`<option value="${station.id}">${stopName(station,settingsTransit)}</option>`).join('');el.remoteSelect.innerHTML=settingsStops.map((station)=>`<option value="${station.id}">${stopName(station,settingsTransit)}</option>`).join('');el.endpointSelect.value=settingsEndpointId;el.remoteSelect.value=settingsRemoteId}
+    async function loadRoutesForTransit(transit){const profile=profileForTransit(transit);if(isParisTransit(transit))return PARIS_LINES;const data=records(await mbta('/routes',{'filter[type]':profile.routeType},transit));if(!data.length)throw Error('No routes found for selected authority');return data}
+    async function syncSettingsTransit(nextTransit,preferDefaults=false){settingsTransit=canonicalTransit(nextTransit);const profile=profileForTransit(settingsTransit);const saved=readSavedSettings(settingsTransit);settingsRoutes=await loadRoutesForTransit(settingsTransit);settingsRouteId=saved.routeId||profile.defaultRouteId||settingsRoutes[0]?.id||'';if(!settingsRoutes.some((route)=>route.id===settingsRouteId)){settingsRouteId=settingsRoutes[0]?.id||''}populateSettingsLineOptions();settingsStops=await loadStopsForRoute(settingsTransit,settingsRouteId);if(!settingsStops.length)throw Error('No stations found for selected route');const ordered=orderedStations(settingsStops,settingsTransit);const first=ordered[0]?.id||settingsStops[0]?.id||'';const second=ordered.at(-1)?.id||settingsStops.find((station)=>station.id!==first)?.id||first;settingsEndpointId=preferDefaults?first:(saved.endpointId||first);settingsRemoteId=preferDefaults?second:(saved.remoteId||second);if(!settingsStops.some((station)=>station.id===settingsEndpointId)){settingsEndpointId=first}if(!settingsStops.some((station)=>station.id===settingsRemoteId)||settingsRemoteId===settingsEndpointId){settingsRemoteId=second}populateSettingsStopOptions()}
+    async function openSettingsDialog(){populateSettingsAuthorityOptions();await syncSettingsTransit(currentTransit,false);if(typeof el.dialog.showModal==='function')el.dialog.showModal();else el.dialog.setAttribute('open','open')}
+    function closeSettingsDialog(){if(typeof el.dialog.close==='function')el.dialog.close();else el.dialog.removeAttribute('open')}
     async function parisStops(route){const response=await cacheRequest('paris','/stops',{route:route.id});const raw=response?.results||[];const grouped=new Map();raw.filter((stop)=>stop.stop_id&&stop.stop_name).forEach((stop)=>{const key=stop.stop_name.trim(),entry=grouped.get(key)||{id:`station-${key.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}`,name:key,stopRefs:[],lon:Number(stop.stop_lon),lat:Number(stop.stop_lat)};entry.stopRefs.push(`STIF:StopPoint:Q:${stop.stop_id.replace(/^IDFM:/,'')}:`);if(Number.isFinite(Number(stop.stop_lon)))entry.lon=Number(stop.stop_lon);if(Number.isFinite(Number(stop.stop_lat)))entry.lat=Number(stop.stop_lat);grouped.set(key,entry)});const stops=[...grouped.values()].map((stop)=>({...stop,stopRefs:[...new Set(stop.stopRefs)]}));return orderedStations(stops)}
-    let dialogMode='line';
-    async function openSettings(mode){dialogMode=mode;el.lineField.hidden=mode!=='line';el.endpointField.hidden=mode!=='stations';el.remoteField.hidden=mode!=='stations';populateLineOptions();if(mode==='stations')await prepareRoute(selectedRouteId,false);if(typeof el.dialog.showModal==='function')el.dialog.showModal();else el.dialog.setAttribute('open','')}
     const normalizeText=(value)=>(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
     const callTime=(call)=>(call?.ExpectedDepartureTime||call?.ExpectedArrivalTime||call?.AimedDepartureTime||call?.AimedArrivalTime||'');
     function dedupeParisItems(items){const byKey=new Map();items.forEach((item)=>{const key=`${trip(item)||item.id}|${time(item)||''}`;if(!byKey.has(key))byKey.set(key,item)});return [...byKey.values()]}
@@ -494,13 +915,13 @@
     function parisMonitoringItems(visits,originRefs,destinationName){const destinationTarget=normalizeText(destinationName),journeys=visits.map((visit,index)=>{const mvj=visit.MonitoredVehicleJourney||{},call=mvj.MonitoredCall||{},stopRef=(visit.MonitoringRef?.value||visit.MonitoringRef||call.StopPointRef?.value||'');return{DatedVehicleJourneyRef:mvj.FramedVehicleJourneyRef?.DatedVehicleJourneyRef||mvj.DatedVehicleJourneyRef||mvj.VehicleJourneyName||String(index),DestinationName:[{value:mvj.DestinationName?.[0]?.value||mvj.DestinationName?.value||mvj.DestinationShortName?.value||''}],EstimatedCalls:{EstimatedCall:[{StopPointRef:{value:stopRef},ExpectedDepartureTime:call.ExpectedDepartureTime,ExpectedArrivalTime:call.ExpectedArrivalTime,AimedDepartureTime:call.AimedDepartureTime,AimedArrivalTime:call.AimedArrivalTime}]}}});const parsed=parisDirectionItems(journeys,originRefs,[],destinationName,'stop-monitoring');if(!destinationTarget){return dedupeParisItems(parsed.originItems)}return dedupeParisItems(parsed.originItems.filter((item)=>{const match=journeys.find((j)=>{const journeyId=j.DatedVehicleJourneyRef?.value||j.DatedVehicleJourneyRef||j.VehicleJourneyRef?.value||j.VehicleJourneyRef||j.FramedVehicleJourneyRef?.DatedVehicleJourneyRef||'';return String(journeyId)===String(trip(item));});const label=(match?.DestinationName?.[0]?.value||match?.DestinationName?.value||match?.DestinationShortName?.value||'').trim();return !label || normalizeText(label)===destinationTarget;}))}
     async function loadParis(){const route=routeById(),[stationA,stationB]=selectedStations(),stationATarget=resolvedParisEndpoint(stationA,stationB),stationBTarget=resolvedParisEndpoint(stationB,stationA),stationARefs=stationA?.stopRefs||[],stationBRefs=stationB?.stopRefs||[],stationATargetRefs=stationATarget?.stopRefs||[],stationBTargetRefs=stationBTarget?.stopRefs||[];if(!route.lineRef||!stationARefs.length||!stationBRefs.length)throw Error('This Paris line or station is not configured for real-time data');const fetchVisits=async(ref)=>{const data=await prim(`/stop-monitoring?${new URLSearchParams({MonitoringRef:ref})}`);return(data.Siri?.ServiceDelivery?.StopMonitoringDelivery||[]).flatMap((delivery)=>delivery.MonitoredStopVisit||[])};const batchMap=async(items,fn,batchSize=2)=>{const results=[];for(let index=0;index<items.length;index+=batchSize){const chunk=items.slice(index,index+batchSize);const chunkResults=await Promise.all(chunk.map(fn));results.push(...chunkResults)}return results};const[aVisitsByRef,bVisitsByRef]=await Promise.all([batchMap(stationARefs,fetchVisits,2),batchMap(stationBRefs,fetchVisits,2)]);let inboundOrigin=parisMonitoringItems(aVisitsByRef.flat(),stationATargetRefs,stationBTarget?.name||''),outboundOrigin=parisMonitoringItems(bVisitsByRef.flat(),stationBTargetRefs,stationATarget?.name||'');const futureLiveItems=[...inboundOrigin,...outboundOrigin].filter((item)=>time(item)&&new Date(time(item)).getTime()>Date.now());if(futureLiveItems.length===0){const response=await prim(`/estimated-timetable?${new URLSearchParams({LineRef:route.lineRef})}`),delivery=response.Siri?.ServiceDelivery?.EstimatedTimetableDelivery?.[0],journeys=(delivery?.EstimatedJourneyVersionFrame||[]).flatMap((frame)=>frame.EstimatedVehicleJourney||[]),aToB=parisDirectionItems(journeys,stationARefs,stationATargetRefs,stationBTarget?.name||''),bToA=parisDirectionItems(journeys,stationBRefs,stationBTargetRefs,stationATarget?.name||'');inboundOrigin=dedupeParisItems(inboundOrigin.concat(aToB.originItems));outboundOrigin=dedupeParisItems(outboundOrigin.concat(bToA.originItems));}const liveParisItems=[...inboundOrigin,...outboundOrigin].filter((item)=>time(item)&&new Date(time(item)).getTime()>Date.now());parisUsedEstimatedFallback=liveParisItems.length===0;const predictionFor=(item)=>({id:item.id,attributes:{departure_time:time(item)},relationships:{trip:{data:{id:trip(item)||item.id}}}});const inboundPredictions=inboundOrigin.map(predictionFor),outboundPredictions=outboundOrigin.map(predictionFor);render(el.inbound,inboundOrigin,inboundPredictions,[],[],[]);render(el.outbound,outboundOrigin,outboundPredictions,[],[],[])}
     function alertFor(alerts,schedule){const id=trip(schedule);return alerts.find((a)=>{const x=a.attributes||{},text=`${x.header||''} ${x.description||''}`.toLowerCase();return /delay|late|hold|service disruption|suspend/.test(text)&&(!a.relationships?.trip?.data?.id||a.relationships.trip.data.id===id)})}
-    function train(record,predictions,alerts,destinationSchedules,destinationPredictions){const scheduled=time(record),prediction=predictions.find((p)=>trip(p)===trip(record)),live=prediction?.attributes?.departure_time||prediction?.attributes?.arrival_time,actual=live||scheduled,minutesUntil=Math.max(1,Math.floor((new Date(actual)-Date.now())/60000)),delay=live?(new Date(live)-new Date(scheduled))/1000:0,delayed=Math.abs(delay)>=60,arrivalSchedule=destinationSchedules.find((r)=>trip(r)===trip(record)),arrivalPrediction=destinationPredictions.find((p)=>trip(p)===trip(record)),liveArrival=arrivalPrediction?.attributes?.arrival_time||arrivalPrediction?.attributes?.departure_time,arrival=liveArrival||(delayed?null:arrivalSchedule?.attributes?.arrival_time||arrivalSchedule?.attributes?.departure_time),platform=String(prediction?.attributes?.platform_name||'').trim(),alert=alertFor(alerts,record),isParisEstimatedFallback=transitMode==='paris'&&parisUsedEstimatedFallback&&String(record?.id||'').startsWith('estimated-timetable-');let note=isParisEstimatedFallback?'Scheduled':'On time',klass=isParisEstimatedFallback?'watch':'';if(delayed){note=`${delay<0?'Early':'Delayed'} ${Math.max(1,Math.round(Math.abs(delay)/60))} min`;klass=delay>0?'delayed':'watch'}else if(alert){note='Line alert reported';klass='watch'}const label=`Scheduled ${displayTime(scheduled)}${arrival?` · Arrives ${displayTime(arrival)}`:''}${platform?` · Platform ${escapeHtml(platform)}`:''}`;return `<article class="train-row"><div><p class="train-time">${displayTime(actual).replace(' AM','<small>AM</small>').replace(' PM','<small>PM</small>')}<small class="countdown">in ${minutesUntil} mins</small></p><p class="train-meta">${label}</p></div><span class="delay-note ${klass}">${note}</span></article>`}
+    function train(record,predictions,alerts,destinationSchedules,destinationPredictions){const scheduled=time(record),prediction=predictions.find((p)=>trip(p)===trip(record)),live=prediction?.attributes?.departure_time||prediction?.attributes?.arrival_time,actual=live||scheduled,minutesUntil=Math.max(1,Math.floor((new Date(actual)-Date.now())/60000)),delay=live?(new Date(live)-new Date(scheduled))/1000:0,delayed=Math.abs(delay)>=60,arrivalSchedule=destinationSchedules.find((r)=>trip(r)===trip(record)),arrivalPrediction=destinationPredictions.find((p)=>trip(p)===trip(record)),liveArrival=arrivalPrediction?.attributes?.arrival_time||arrivalPrediction?.attributes?.departure_time,arrival=liveArrival||(delayed?null:arrivalSchedule?.attributes?.arrival_time||arrivalSchedule?.attributes?.departure_time),platform=String(prediction?.attributes?.platform_name||'').trim(),alert=alertFor(alerts,record),isParisEstimatedFallback=isParisTransit(currentTransit)&&parisUsedEstimatedFallback&&String(record?.id||'').startsWith('estimated-timetable-');let note=isParisEstimatedFallback?'Scheduled':'On time',klass=isParisEstimatedFallback?'watch':'';if(delayed){note=`${delay<0?'Early':'Delayed'} ${Math.max(1,Math.round(Math.abs(delay)/60))} min`;klass=delay>0?'delayed':'watch'}else if(alert){note='Line alert reported';klass='watch'}const label=`Scheduled ${displayTime(scheduled)}${arrival?` · Arrives ${displayTime(arrival)}`:''}${platform?` · Platform ${escapeHtml(platform)}`:''}`;return `<article class="train-row"><div><p class="train-time">${displayTime(actual).replace(' AM','<small>AM</small>').replace(' PM','<small>PM</small>')}<small class="countdown">in ${minutesUntil} mins</small></p><p class="train-meta">${label}</p></div><span class="delay-note ${klass}">${note}</span></article>`}
     function departureFor(record,predictions){const prediction=predictions.find((p)=>trip(p)===trip(record)),predicted=prediction?.attributes?.departure_time||prediction?.attributes?.arrival_time;return predicted||time(record)}
     function render(target,items,predictions,alerts,destinationSchedules,destinationPredictions){const now=Date.now(),upcoming=items.filter((r)=>time(r)&&new Date(departureFor(r,predictions)).getTime()>now).sort((a,b)=>new Date(departureFor(a,predictions))-new Date(departureFor(b,predictions))).slice(0,2);target.innerHTML=upcoming.length?upcoming.map((r)=>train(r,predictions,alerts,destinationSchedules,destinationPredictions)).join(''):'<div class="empty-state">No more departures found</div>'}
-    async function loadBoston(){const[stationA,stationB]=selectedStations(),[aSchedules,bSchedules,aPredictions,bPredictions,alerts]=await Promise.all([mbta('/schedules',{'filter[route]':selectedRouteId,'filter[stop]':stationA.id,...windowParams(),include:'trip'}),mbta('/schedules',{'filter[route]':selectedRouteId,'filter[stop]':stationB.id,...windowParams(),include:'trip'}),mbta('/predictions',{'filter[route]':selectedRouteId,'filter[stop]':stationA.id,include:'trip'}),mbta('/predictions',{'filter[route]':selectedRouteId,'filter[stop]':stationB.id,include:'trip'}),mbta('/alerts',{'filter[route]':selectedRouteId})]);const aScheduleRecords=records(aSchedules),bScheduleRecords=records(bSchedules),aPredRecords=records(aPredictions),bPredRecords=records(bPredictions),alertRecords=records(alerts),bTripIds=new Set(bScheduleRecords.map(trip)),commonTripIds=new Set(aScheduleRecords.map(trip).filter((id)=>bTripIds.has(id)));const paired=[...commonTripIds].map((tripId)=>{const fromA=aScheduleRecords.find((record)=>trip(record)===tripId),fromB=bScheduleRecords.find((record)=>trip(record)===tripId);return{fromA,fromB,timeA:fromA?new Date(time(fromA)).getTime():NaN,timeB:fromB?new Date(time(fromB)).getTime():NaN}}).filter((pair)=>pair.fromA&&pair.fromB&&Number.isFinite(pair.timeA)&&Number.isFinite(pair.timeB));const aToB=paired.filter((pair)=>pair.timeA<pair.timeB),bToA=paired.filter((pair)=>pair.timeB<pair.timeA),aToBSchedules=aToB.map((pair)=>pair.fromA),bToASchedules=bToA.map((pair)=>pair.fromB),aToBDestinations=aToB.map((pair)=>pair.fromB),bToADestinations=bToA.map((pair)=>pair.fromA);render(el.inbound,aToBSchedules,aPredRecords,alertRecords,aToBDestinations,bPredRecords);render(el.outbound,bToASchedules,bPredRecords,alertRecords,bToADestinations,aPredRecords)}
-    let loadInFlight=false;
-    async function load(){if(loadInFlight)return;loadInFlight=true;el.status.textContent='Checking live departures...';el.dot.className='status-dot loading';el.refresh.disabled=true;try{if(transitMode==='paris'){await loadParis()}else{await loadBoston()}el.status.textContent=transitMode==='paris'&&parisUsedEstimatedFallback?'Scheduled data only':'Live data connected';el.updated.textContent=`Updated ${new Intl.DateTimeFormat(undefined,{hour:'numeric',minute:'2-digit'}).format(new Date())}`;el.dot.className=transitMode==='paris'&&parisUsedEstimatedFallback?'status-dot scheduled':'status-dot connected'}catch(error){console.error(error);el.inbound.innerHTML=el.outbound.innerHTML='<div class="empty-state">Live data temporarily unavailable</div>';el.status.textContent=`Could not reach ${transitMode==='paris'?'Île-de-France Mobilités':'MBTA'} live data`;el.dot.className='status-dot error';el.updated.textContent=''}finally{loadInFlight=false;el.refresh.disabled=false}}
-    async function initialize(){try{if(transitMode==='boston'){routes=records(await mbta('/routes',{'filter[type]':'2'}));if(!routes.length)throw Error('No commuter rail routes found');if(!routes.some((route)=>route.id===selectedRouteId))selectedRouteId=DEFAULT_ROUTE}else if(!routes.some((route)=>route.id===selectedRouteId))selectedRouteId='metro-9';populateLineOptions();await prepareRoute(selectedRouteId,false);updateRouteText();document.documentElement.classList.add('transit-ready');load()}catch(error){console.error(error);updateRouteText();document.documentElement.classList.add('transit-ready');setStatusMessage(`Could not load ${transitMode==='paris'?'Paris':'commuter rail'} lines`,'error');el.inbound.innerHTML=el.outbound.innerHTML='<div class="empty-state">Live data temporarily unavailable</div>'}}
+    async function loadBoston(){const[stationA,stationB]=selectedStations();if(!stationA||!stationB)throw Error('Station selection is incomplete');const[aSchedules,bSchedules,aPredictions,bPredictions,alerts]=await Promise.all([mbta('/schedules',{'filter[route]':selectedRouteId,'filter[stop]':stationA.id,...windowParams(),include:'trip'}),mbta('/schedules',{'filter[route]':selectedRouteId,'filter[stop]':stationB.id,...windowParams(),include:'trip'}),mbta('/predictions',{'filter[route]':selectedRouteId,'filter[stop]':stationA.id,include:'trip'}),mbta('/predictions',{'filter[route]':selectedRouteId,'filter[stop]':stationB.id,include:'trip'}),mbta('/alerts',{'filter[route]':selectedRouteId})]);const aScheduleRecords=records(aSchedules),bScheduleRecords=records(bSchedules),aPredRecords=records(aPredictions),bPredRecords=records(bPredictions),alertRecords=records(alerts),bTripIds=new Set(bScheduleRecords.map(trip)),commonTripIds=new Set(aScheduleRecords.map(trip).filter((id)=>bTripIds.has(id)));const paired=[...commonTripIds].map((tripId)=>{const fromA=aScheduleRecords.find((record)=>trip(record)===tripId),fromB=bScheduleRecords.find((record)=>trip(record)===tripId);return{fromA,fromB,timeA:fromA?new Date(time(fromA)).getTime():NaN,timeB:fromB?new Date(time(fromB)).getTime():NaN}}).filter((pair)=>pair.fromA&&pair.fromB&&Number.isFinite(pair.timeA)&&Number.isFinite(pair.timeB));const aToB=paired.filter((pair)=>pair.timeA<pair.timeB),bToA=paired.filter((pair)=>pair.timeB<pair.timeA),aToBSchedules=aToB.map((pair)=>pair.fromA),bToASchedules=bToA.map((pair)=>pair.fromB),aToBDestinations=aToB.map((pair)=>pair.fromB),bToADestinations=bToA.map((pair)=>pair.fromA);render(el.inbound,aToBSchedules,aPredRecords,alertRecords,aToBDestinations,bPredRecords);render(el.outbound,bToASchedules,bPredRecords,alertRecords,bToADestinations,aPredRecords)}
+    async function load(){if(loadInFlight)return;loadInFlight=true;el.status.textContent='Checking live departures...';el.dot.className='status-dot loading';el.refresh.disabled=true;try{if(isParisTransit(currentTransit)){await loadParis()}else{await loadBoston()}el.status.textContent=isParisTransit(currentTransit)&&parisUsedEstimatedFallback?'Scheduled data only':'Live data connected';el.updated.textContent=`Updated ${new Intl.DateTimeFormat(undefined,{hour:'numeric',minute:'2-digit'}).format(new Date())}`;el.dot.className=isParisTransit(currentTransit)&&parisUsedEstimatedFallback?'status-dot scheduled':'status-dot connected'}catch(error){console.error(error);el.inbound.innerHTML=el.outbound.innerHTML='<div class="empty-state">Live data temporarily unavailable</div>';el.status.textContent=`Could not reach ${isParisTransit(currentTransit)?'Île-de-France Mobilités':'MBTA'} live data`;el.dot.className='status-dot error';el.updated.textContent=''}finally{loadInFlight=false;el.refresh.disabled=false}}
+    function replaceTransitInUrl(transit){const url=new URL(location.href);url.searchParams.set('transit',canonicalTransit(transit));history.replaceState({},'',url)}
+    async function initialize(){try{currentTransit=canonicalTransit(currentTransit);loadTransitSelectionFromStorage(currentTransit);routes=await loadRoutesForTransit(currentTransit);if(!routes.some((route)=>route.id===selectedRouteId)){const profile=profileForTransit(currentTransit);selectedRouteId=profile.defaultRouteId&&routes.some((route)=>route.id===profile.defaultRouteId)?profile.defaultRouteId:routes[0]?.id||''}await prepareRoute(selectedRouteId,false);updateRouteText();document.documentElement.classList.add('transit-ready');load()}catch(error){console.error(error);updateRouteText();document.documentElement.classList.add('transit-ready');setStatusMessage(`Could not load ${isParisTransit(currentTransit)?'Paris':'MBTA'} lines`,'error');el.inbound.innerHTML=el.outbound.innerHTML='<div class="empty-state">Live data temporarily unavailable</div>'}}
     function formatStatsTimestamp(value, isUnixSeconds = false) {
       if (value === null || value === undefined || value === 'unknown' || value === '' || value === 'null') {
         return 'unknown';
@@ -567,13 +988,24 @@
       }
       return `${formatElapsedRuntime(Math.max(0, now - then))} ago`;
     }
-    async function loadStatsDialog(){
-      if (!el.statsDialog) return;
+    function runtimeMetaHtml(runtime){
+      return `
+        <span class="meta-item">${runtime?.commit ? `<a href="https://github.com/kx1t/docker-commuterrail/commit/${runtime.commit}" target="_blank" rel="noreferrer">commit ${runtime.commit}</a>` : 'commit unknown'}</span>
+        <span class="meta-item">${runtime?.build_date && runtime.build_date !== 'unknown' ? `built ${formatStatsTimestamp(runtime.build_date)}` : 'built unknown'}</span>
+        <span class="meta-item">${runtime?.up_since ? `up since ${formatStatsTimestamp(runtime.up_since, true)} (${formatElapsedRuntime((Date.now() / 1000) - Number(runtime.up_since))})` : 'up since unknown'}</span>
+        <span class="meta-item"><a href="https://github.com/kx1t/docker-commuterrail" target="_blank" rel="noreferrer">SW Repo</a></span>
+      `;
+    }
+    async function fetchStatsPayload(){
+      const statsUrl = new URL('api/stats', window.location.href.endsWith('/') ? window.location.href : `${window.location.href}/`);
+      const response = await fetch(statsUrl);
+      return response.json();
+    }
+    async function loadStatsDialog(openDialog=true){
+      if (!el.statsDialog) return null;
       el.statsBody.innerHTML = '<div class="loading-state">Loading cache diagnostics…</div>';
       try {
-        const statsUrl = new URL('api/stats', window.location.href.endsWith('/') ? window.location.href : `${window.location.href}/`);
-        const response = await fetch(statsUrl);
-        const payload = await response.json();
+        const payload = await fetchStatsPayload();
         const rows = payload?.data || {};
         const clients = Array.isArray(rows.clients) ? rows.clients : [];
         const transits = Array.isArray(rows.transits) ? rows.transits : [];
@@ -635,49 +1067,125 @@
             </div>
           </section>
           <div class="stats-meta-row">
-            <span class="meta-item">${rows.runtime?.commit ? `<a href="https://github.com/kx1t/docker-commuterrail/commit/${rows.runtime.commit}" target="_blank" rel="noreferrer">commit ${rows.runtime.commit}</a>` : 'commit unknown'}</span>
-            <span class="meta-item">${rows.runtime?.build_date && rows.runtime.build_date !== 'unknown' ? `built ${formatStatsTimestamp(rows.runtime.build_date)}` : 'built unknown'}</span>
-            <span class="meta-item">${rows.runtime?.up_since ? `up since ${formatStatsTimestamp(rows.runtime.up_since, true)} (${formatElapsedRuntime((Date.now() / 1000) - Number(rows.runtime.up_since))})` : 'up since unknown'}</span>
-            <span class="meta-item"><a href="https://github.com/kx1t/docker-commuterrail" target="_blank" rel="noreferrer">SW Repo</a></span>
+            ${runtimeMetaHtml(rows.runtime)}
           </div>
         `;
+        if(openDialog){
+          if (typeof el.statsDialog.showModal === 'function') {
+            el.statsDialog.showModal();
+          } else {
+            el.statsDialog.setAttribute('open', 'open');
+          }
+        }
+        return rows;
       } catch (error) {
         console.error(error);
         el.statsBody.innerHTML = '<div class="empty-state">Cache diagnostics are temporarily unavailable.</div>';
-      }
-      if (typeof el.statsDialog.showModal === 'function') {
-        el.statsDialog.showModal();
-      } else {
-        el.statsDialog.setAttribute('open', 'open');
+        return null;
       }
     }
     async function openStatsDialog(){
-      await loadStatsDialog();
+      await loadStatsDialog(true);
     }
     function openTipsDialog(){
-      const tipsDialog = document.getElementById('tips-dialog');
-      if (!tipsDialog) return;
-      if (typeof tipsDialog.showModal === 'function') {
-        tipsDialog.showModal();
+      if (!el.tipsDialog) return;
+      if (typeof el.tipsDialog.showModal === 'function') {
+        el.tipsDialog.showModal();
       } else {
-        tipsDialog.setAttribute('open', 'open');
+        el.tipsDialog.setAttribute('open', 'open');
       }
     }
     function closeTipsDialog(){
-      const tipsDialog = document.getElementById('tips-dialog');
-      if (!tipsDialog) return;
-      if (typeof tipsDialog.close === 'function') {
-        tipsDialog.close();
+      if (!el.tipsDialog) return;
+      if (typeof el.tipsDialog.close === 'function') {
+        el.tipsDialog.close();
       } else {
-        tipsDialog.removeAttribute('open');
+        el.tipsDialog.removeAttribute('open');
       }
     }
-    function switchTransitMode(nextMode){const url=new URL(location.href);url.searchParams.set('transit',nextMode);location.assign(url.toString())}
-    const helpLink = document.getElementById('help-link');
-    const tipsClose = document.getElementById('tips-close');
-    if (helpLink) helpLink.addEventListener('click', openTipsDialog);
-    if (tipsClose) tipsClose.addEventListener('click', closeTipsDialog);
-    el.lineSelector.addEventListener('click',()=>openSettings('line'));el.routeSummary.addEventListener('click',()=>openSettings('stations'));el.endpointSelect.addEventListener('change',()=>{selectedEndpointId=el.endpointSelect.value;selectedRemoteId=el.remoteSelect.value||selectedRemoteId;if(dialogMode==='stations'){populateStationOptions()}else{updateRouteText()}});el.remoteSelect.addEventListener('change',()=>{selectedRemoteId=el.remoteSelect.value;if(dialogMode!=='stations')updateRouteText()});el.form.addEventListener('submit',async(event)=>{event.preventDefault();if(dialogMode==='line'){selectedRouteId=el.lineSelect.value;el.dialog.close();await prepareRoute(selectedRouteId,false)}else{selectedEndpointId=el.endpointSelect.value;selectedRemoteId=el.remoteSelect.value;el.dialog.close()}localStorage.setItem(`${STORAGE_KEY}-${transitMode}`,JSON.stringify({routeId:selectedRouteId,remoteId:selectedRemoteId,endpointId:selectedEndpointId}));updateRouteText();load()});el.cancelSettings.addEventListener('click',()=>el.dialog.close());el.refresh.addEventListener('click',load);el.providerFooter.addEventListener('click',openStatsDialog);el.statsClose.addEventListener('click',()=>{if(typeof el.statsDialog.close==='function'){el.statsDialog.close();}else{el.statsDialog.removeAttribute('open');}});el.statsRefresh.addEventListener('click',loadStatsDialog);el.providerLabel.addEventListener('click',()=>switchTransitMode(transitMode==='paris'?'boston':'paris'));initialize();setInterval(load,REFRESH);
+    async function openAboutDialog(){
+      const rows=await loadStatsDialog(false);
+      if(el.aboutMetaRow){
+        el.aboutMetaRow.innerHTML=runtimeMetaHtml(rows?.runtime||{});
+      }
+      if(typeof el.aboutDialog.showModal==='function'){
+        el.aboutDialog.showModal();
+      }else{
+        el.aboutDialog.setAttribute('open','open');
+      }
+    }
+    function closeAboutDialog(){
+      if(typeof el.aboutDialog.close==='function'){
+        el.aboutDialog.close();
+      }else{
+        el.aboutDialog.removeAttribute('open');
+      }
+    }
+
+    if (el.helpLink) el.helpLink.addEventListener('click', openTipsDialog);
+    if (el.tipsClose) el.tipsClose.addEventListener('click', closeTipsDialog);
+    if (el.aboutClose) el.aboutClose.addEventListener('click', closeAboutDialog);
+    if (el.settingsButton) el.settingsButton.addEventListener('click', openSettingsDialog);
+    if (el.cancelSettings) el.cancelSettings.addEventListener('click', closeSettingsDialog);
+    if (el.settingsOpenStats) el.settingsOpenStats.addEventListener('click', openStatsDialog);
+    if (el.settingsOpenTips) el.settingsOpenTips.addEventListener('click', openTipsDialog);
+    if (el.settingsOpenAbout) el.settingsOpenAbout.addEventListener('click', openAboutDialog);
+    if (el.refresh) el.refresh.addEventListener('click', load);
+    if (el.providerFooter) el.providerFooter.addEventListener('click', openStatsDialog);
+    if (el.statsClose) el.statsClose.addEventListener('click', () => { if (typeof el.statsDialog.close === 'function') { el.statsDialog.close(); } else { el.statsDialog.removeAttribute('open'); } });
+    if (el.statsRefresh) el.statsRefresh.addEventListener('click', () => loadStatsDialog(true));
+    if (el.authoritySelect) {
+      el.authoritySelect.addEventListener('change', async () => {
+        await syncSettingsTransit(el.authoritySelect.value, false);
+      });
+    }
+    if (el.lineSelect) {
+      el.lineSelect.addEventListener('change', async () => {
+        settingsRouteId=el.lineSelect.value;
+        settingsStops=await loadStopsForRoute(settingsTransit,settingsRouteId);
+        const ordered=orderedStations(settingsStops,settingsTransit);
+        settingsEndpointId=ordered[0]?.id||settingsStops[0]?.id||'';
+        settingsRemoteId=ordered.at(-1)?.id||settingsStops.find((station)=>station.id!==settingsEndpointId)?.id||settingsEndpointId;
+        populateSettingsStopOptions();
+      });
+    }
+    if (el.endpointSelect) {
+      el.endpointSelect.addEventListener('change', () => {
+        settingsEndpointId=el.endpointSelect.value;
+        if(settingsRemoteId===settingsEndpointId){
+          settingsRemoteId=settingsStops.find((station)=>station.id!==settingsEndpointId)?.id||settingsEndpointId;
+          el.remoteSelect.value=settingsRemoteId;
+        }
+      });
+    }
+    if (el.remoteSelect) {
+      el.remoteSelect.addEventListener('change', () => {
+        settingsRemoteId=el.remoteSelect.value;
+        if(settingsRemoteId===settingsEndpointId){
+          settingsEndpointId=settingsStops.find((station)=>station.id!==settingsRemoteId)?.id||settingsEndpointId;
+          el.endpointSelect.value=settingsEndpointId;
+        }
+      });
+    }
+    if (el.form) {
+      el.form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        currentTransit=canonicalTransit(settingsTransit);
+        routes=[...settingsRoutes];
+        routeStops=[...settingsStops];
+        selectedRouteId=settingsRouteId;
+        selectedEndpointId=settingsEndpointId;
+        selectedRemoteId=settingsRemoteId;
+        writeSavedSettings(currentTransit,{routeId:selectedRouteId,endpointId:selectedEndpointId,remoteId:selectedRemoteId});
+        replaceTransitInUrl(currentTransit);
+        closeSettingsDialog();
+        updateRouteText();
+        await load();
+      });
+    }
+
+    initialize();
+    setInterval(load,REFRESH);
   </script>
 </body>
 </html>

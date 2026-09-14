@@ -44,6 +44,7 @@ MAX_THREADS = int(os.getenv('HTTP_WORKERS', str(DEFAULT_HTTP_WORKERS)))
 STATS_FLUSH_INTERVAL_SECONDS = int(os.getenv('STATS_FLUSH_INTERVAL_SECONDS', '30'))
 DEFAULT_PARIS_PATH = 'estimated-timetable?LineRef=STIF:Line::C01379:'
 STATIC_ROOT = Path('/app')
+MBTA_TRANSITS = {'boston', 'boston-commuterrail', 'boston-commuterrair', 'boston-subway', 'boston-bus'}
 
 cache_lock = threading.RLock()
 cache_store = {}
@@ -354,6 +355,17 @@ def normalize_key(value: str) -> str:
     return (value or '').strip() or 'default'
 
 
+def canonical_transit_name(raw: Optional[str]) -> str:
+    candidate = (raw or 'paris').strip().lower()
+    if not candidate:
+        return 'paris'
+    if candidate == 'boston-commuterrair':
+        return 'boston-commuterrail'
+    if candidate == 'boston':
+        return 'boston-commuterrail'
+    return candidate
+
+
 def current_timestamp() -> float:
     return time.time()
 
@@ -373,9 +385,10 @@ def parse_json_query(raw):
 
 
 def make_headers(transit: str) -> dict:
-    if transit.lower() == 'paris':
+    normalized = canonical_transit_name(transit)
+    if normalized == 'paris':
         return {'apikey': PRIM_API_KEY} if PRIM_API_KEY else {}
-    if transit.lower() == 'boston':
+    if normalized in MBTA_TRANSITS or normalized.startswith('boston-'):
         return {'x-api-key': MBTA_API_KEY} if MBTA_API_KEY else {}
     return {}
 
@@ -451,8 +464,9 @@ def error_for_missing_cache(exc):
 
 
 def upstream_url_for(transit: str, endpoint: str, query: Optional[Dict[str, Any]] = None):
-    base = PRIM_API if transit.lower() == 'paris' else MBTA_API
-    if transit.lower() == 'paris':
+    normalized = canonical_transit_name(transit)
+    base = PRIM_API if normalized == 'paris' else MBTA_API
+    if normalized == 'paris':
         if endpoint in ('/stops', 'stops'):
             line = (query or {}).get('route', '')
             line_number = str(line).split('-')[-1]
@@ -620,7 +634,7 @@ def build_stats_payload():
 def resolve_endpoint(path: str, transit: str):
     path = (path or '').strip()
     if not path or path == '/':
-        return DEFAULT_PARIS_PATH if transit.lower() == 'paris' else '/routes'
+        return DEFAULT_PARIS_PATH if canonical_transit_name(transit) == 'paris' else '/routes'
     return path.lstrip('/')
 
 
@@ -671,7 +685,7 @@ class TransitCacheHandler(BaseHTTPRequestHandler):
             parsed = urlparse(self.path)
             request_path = strip_proxy_prefix(parsed.path)
             query = parse_qs(parsed.query)
-            transit = (query.get('transit', ['paris'])[0] or 'paris').lower()
+            transit = canonical_transit_name(query.get('transit', ['paris'])[0] or 'paris')
             endpoint = query.get('path', [resolve_endpoint(request_path, transit)])[0]
             request_query = parse_json_query(query.get('query', ['{}'])[0])
             mark_transit_requested(transit)

@@ -77,7 +77,25 @@ The reverse proxy can route that to the cache service or to a static frontend th
 
 ## Front-end behavior
 
-The page still supports the single endpoint with `transit` selection. For Paris and Boston, the frontend calls the cache endpoint rather than hitting the upstream APIs directly. The cache maintains a 60-second TTL and serves stale data only if the server cannot refresh it after a recent request; the browser then shows an inline warning or error message.
+The page uses a dedicated settings popup (cogwheel icon next to refresh) for all user configuration changes. Transit authority, line, and origin/destination stop selection are now all managed in that popup, optimized for mobile use.
+
+The main view no longer uses clickable provider or line labels for switching. The same refresh icon style is used on both the main screen and the cache diagnostics screen.
+
+For Paris and Boston variants, the frontend calls the cache endpoint rather than hitting upstream APIs directly. The cache maintains a 60-second TTL and serves stale data only if the server cannot refresh it after a recent request; the browser then shows an inline warning or error message.
+
+### Transit query parameter behavior
+
+Supported `transit` values:
+
+- `paris`
+- `boston-commuterrail`
+- `boston-subway`
+- `boston-bus`
+
+Compatibility aliases:
+
+- `boston-commuterrair` is accepted as an alias of `boston-commuterrail`
+- `boston` resolves to the last selected Boston mode (`boston-commuterrail`, `boston-subway`, or `boston-bus`), and defaults to `boston-commuterrail` when no prior selection exists
 
 ## Error handling contract
 
