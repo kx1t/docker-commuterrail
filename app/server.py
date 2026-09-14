@@ -557,7 +557,14 @@ def build_vehicle_snapshot(transit: str, query: Optional[Dict[str, Any]] = None)
             'message': 'Paris live vehicle coordinates are not exposed by the current feed.',
         }
 
-    payload = fetch_upstream(normalized, '/vehicles', {'filter[trip]': trip, 'page[limit]': '10'})
+    try:
+        payload = fetch_upstream(normalized, '/vehicles', {'filter[trip]': trip, 'page[limit]': '10'})
+    except (HTTPError, URLError, TimeoutError, RuntimeError) as exc:
+        return {
+            'status': 'warning',
+            'data': unavailable_snapshot(normalized, trip, f'Live vehicle position could not be retrieved right now. {http_error_text(exc)}'),
+            'message': f'Live vehicle position could not be retrieved right now. {http_error_text(exc)}',
+        }
     snapshot = extract_mbta_vehicle_snapshot(payload, normalized, trip)
     if snapshot:
         return {'status': 'ok', 'data': snapshot}
