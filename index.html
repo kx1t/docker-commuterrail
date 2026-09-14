@@ -895,7 +895,7 @@
     function lineDefaults(stations){const ordered=orderedStations(stations),first=ordered[0]||null,second=ordered.at(-1)||first;return[first,second]}
     function resolvedParisEndpoint(originStation,directionStation){const ordered=orderedStations(routeStops),originIndex=ordered.findIndex((station)=>station.id===originStation?.id),directionIndex=ordered.findIndex((station)=>station.id===directionStation?.id);if(originIndex===-1||directionIndex===-1)return directionStation;return originIndex<=directionIndex?ordered.at(-1)||directionStation:ordered[0]||directionStation}
     function syncStationSelection(preferDefaults=false){if(!routeStops.length){selectedEndpointId='';selectedRemoteId='';return}const[defaultFirst,defaultSecond]=lineDefaults(routeStops);if(preferDefaults||!routeStops.some((station)=>station.id===selectedEndpointId)){selectedEndpointId=defaultFirst?.id||routeStops[0]?.id||''}if(preferDefaults||!routeStops.some((station)=>station.id===selectedRemoteId)||selectedRemoteId===selectedEndpointId){selectedRemoteId=defaultSecond?.id||routeStops.find((station)=>station.id!==selectedEndpointId)?.id||selectedEndpointId}if(selectedRemoteId===selectedEndpointId&&routeStops.length>1){selectedRemoteId=routeStops.find((station)=>station.id!==selectedEndpointId)?.id||selectedRemoteId}}
-    function routeLabel(route,transit=currentTransit){if(isParisTransit(transit))return route?.name||profileForTransit(transit).routeLabel;return route?.attributes?.long_name||route?.id||profileForTransit(transit).routeLabel}
+    function routeLabel(route,transit=currentTransit){if(isParisTransit(transit))return route?.name||profileForTransit(transit).routeLabel;const mode=canonicalTransit(transit),routeId=String(route?.id||'').trim(),longName=String(route?.attributes?.long_name||'').trim();if(mode==='boston-bus'){if(routeId&&longName){return longName.toLowerCase().startsWith(routeId.toLowerCase())?longName:`${routeId} ${longName}`}return routeId||longName||profileForTransit(transit).routeLabel}return longName||routeId||profileForTransit(transit).routeLabel}
     function updateRouteText(){const route=routeById(),stationA=stationById(selectedEndpointId),stationB=stationById(selectedRemoteId),lineName=routeLabel(route,currentTransit),stationAName=stopName(stationA,currentTransit),stationBName=stopName(stationB,currentTransit),profile=profileForTransit(currentTransit);el.lineMark.textContent=lineName.trim().replace(/^(Metro line|RER|MBTA)\s*/i,'').charAt(0).toUpperCase()||'T';el.lineTitle.textContent=lineName;el.providerLabel.textContent=profile.provider;el.providerFooter.textContent=profile.footer;el.routeSummary.textContent=`${stationAName} ↔ ${stationBName}`;el.inboundTitle.innerHTML=`${stationAName} <span>to</span> ${stationBName}`;el.outboundTitle.innerHTML=`${stationBName} <span>to</span> ${stationAName}`;document.documentElement.dataset.transit=transitTheme(currentTransit)}
     async function loadStopsForRoute(transit,routeId){if(isParisTransit(transit)){const route=settingsRoutes.find((item)=>item.id===routeId)||routes.find((item)=>item.id===routeId)||{id:routeId};return parisStops(route)}return records(await mbta('/stops',{'filter[route]':routeId},transit))}
     async function prepareRoute(routeId,preferDefault){selectedRouteId=routeId;routeStops=await loadStopsForRoute(currentTransit,selectedRouteId);if(!routeStops.length)throw Error('No stations found');syncStationSelection(preferDefault);updateRouteText()}
@@ -918,7 +918,64 @@
     function train(record,predictions,alerts,destinationSchedules,destinationPredictions){const scheduled=time(record),prediction=predictions.find((p)=>trip(p)===trip(record)),live=prediction?.attributes?.departure_time||prediction?.attributes?.arrival_time,actual=live||scheduled,minutesUntil=Math.max(1,Math.floor((new Date(actual)-Date.now())/60000)),delay=live?(new Date(live)-new Date(scheduled))/1000:0,delayed=Math.abs(delay)>=60,arrivalSchedule=destinationSchedules.find((r)=>trip(r)===trip(record)),arrivalPrediction=destinationPredictions.find((p)=>trip(p)===trip(record)),liveArrival=arrivalPrediction?.attributes?.arrival_time||arrivalPrediction?.attributes?.departure_time,arrival=liveArrival||(delayed?null:arrivalSchedule?.attributes?.arrival_time||arrivalSchedule?.attributes?.departure_time),platform=String(prediction?.attributes?.platform_name||'').trim(),alert=alertFor(alerts,record),isParisEstimatedFallback=isParisTransit(currentTransit)&&parisUsedEstimatedFallback&&String(record?.id||'').startsWith('estimated-timetable-');let note=isParisEstimatedFallback?'Scheduled':'On time',klass=isParisEstimatedFallback?'watch':'';if(delayed){note=`${delay<0?'Early':'Delayed'} ${Math.max(1,Math.round(Math.abs(delay)/60))} min`;klass=delay>0?'delayed':'watch'}else if(alert){note='Line alert reported';klass='watch'}const label=`Scheduled ${displayTime(scheduled)}${arrival?` · Arrives ${displayTime(arrival)}`:''}${platform?` · Platform ${escapeHtml(platform)}`:''}`;return `<article class="train-row"><div><p class="train-time">${displayTime(actual).replace(' AM','<small>AM</small>').replace(' PM','<small>PM</small>')}<small class="countdown">in ${minutesUntil} mins</small></p><p class="train-meta">${label}</p></div><span class="delay-note ${klass}">${note}</span></article>`}
     function departureFor(record,predictions){const prediction=predictions.find((p)=>trip(p)===trip(record)),predicted=prediction?.attributes?.departure_time||prediction?.attributes?.arrival_time;return predicted||time(record)}
     function render(target,items,predictions,alerts,destinationSchedules,destinationPredictions){const now=Date.now(),upcoming=items.filter((r)=>time(r)&&new Date(departureFor(r,predictions)).getTime()>now).sort((a,b)=>new Date(departureFor(a,predictions))-new Date(departureFor(b,predictions))).slice(0,2);target.innerHTML=upcoming.length?upcoming.map((r)=>train(r,predictions,alerts,destinationSchedules,destinationPredictions)).join(''):'<div class="empty-state">No more departures found</div>'}
-    async function loadBoston(){const[stationA,stationB]=selectedStations();if(!stationA||!stationB)throw Error('Station selection is incomplete');const[aSchedules,bSchedules,aPredictions,bPredictions,alerts]=await Promise.all([mbta('/schedules',{'filter[route]':selectedRouteId,'filter[stop]':stationA.id,...windowParams(),include:'trip'}),mbta('/schedules',{'filter[route]':selectedRouteId,'filter[stop]':stationB.id,...windowParams(),include:'trip'}),mbta('/predictions',{'filter[route]':selectedRouteId,'filter[stop]':stationA.id,include:'trip'}),mbta('/predictions',{'filter[route]':selectedRouteId,'filter[stop]':stationB.id,include:'trip'}),mbta('/alerts',{'filter[route]':selectedRouteId})]);const aScheduleRecords=records(aSchedules),bScheduleRecords=records(bSchedules),aPredRecords=records(aPredictions),bPredRecords=records(bPredictions),alertRecords=records(alerts),bTripIds=new Set(bScheduleRecords.map(trip)),commonTripIds=new Set(aScheduleRecords.map(trip).filter((id)=>bTripIds.has(id)));const paired=[...commonTripIds].map((tripId)=>{const fromA=aScheduleRecords.find((record)=>trip(record)===tripId),fromB=bScheduleRecords.find((record)=>trip(record)===tripId);return{fromA,fromB,timeA:fromA?new Date(time(fromA)).getTime():NaN,timeB:fromB?new Date(time(fromB)).getTime():NaN}}).filter((pair)=>pair.fromA&&pair.fromB&&Number.isFinite(pair.timeA)&&Number.isFinite(pair.timeB));const aToB=paired.filter((pair)=>pair.timeA<pair.timeB),bToA=paired.filter((pair)=>pair.timeB<pair.timeA),aToBSchedules=aToB.map((pair)=>pair.fromA),bToASchedules=bToA.map((pair)=>pair.fromB),aToBDestinations=aToB.map((pair)=>pair.fromB),bToADestinations=bToA.map((pair)=>pair.fromA);render(el.inbound,aToBSchedules,aPredRecords,alertRecords,aToBDestinations,bPredRecords);render(el.outbound,bToASchedules,bPredRecords,alertRecords,bToADestinations,aPredRecords)}
+    async function loadBoston(){
+      const [stationA,stationB]=selectedStations();
+      if(!stationA||!stationB)throw Error('Station selection is incomplete');
+      const [aSchedules,bSchedules,aPredictions,bPredictions,alerts]=await Promise.all([
+        mbta('/schedules',{'filter[route]':selectedRouteId,'filter[stop]':stationA.id,...windowParams(),include:'trip'}),
+        mbta('/schedules',{'filter[route]':selectedRouteId,'filter[stop]':stationB.id,...windowParams(),include:'trip'}),
+        mbta('/predictions',{'filter[route]':selectedRouteId,'filter[stop]':stationA.id,include:'trip'}),
+        mbta('/predictions',{'filter[route]':selectedRouteId,'filter[stop]':stationB.id,include:'trip'}),
+        mbta('/alerts',{'filter[route]':selectedRouteId})
+      ]);
+
+      const aScheduleRecords=records(aSchedules);
+      const bScheduleRecords=records(bSchedules);
+      const aPredRecords=records(aPredictions);
+      const bPredRecords=records(bPredictions);
+      const alertRecords=records(alerts);
+      const mode=canonicalTransit(currentTransit);
+
+      if(mode==='boston-commuterrail'){
+        const bTripIds=new Set(bScheduleRecords.map(trip));
+        const commonTripIds=new Set(aScheduleRecords.map(trip).filter((id)=>bTripIds.has(id)));
+        const paired=[...commonTripIds].map((tripId)=>{const fromA=aScheduleRecords.find((record)=>trip(record)===tripId),fromB=bScheduleRecords.find((record)=>trip(record)===tripId);return{fromA,fromB,timeA:fromA?new Date(time(fromA)).getTime():NaN,timeB:fromB?new Date(time(fromB)).getTime():NaN}}).filter((pair)=>pair.fromA&&pair.fromB&&Number.isFinite(pair.timeA)&&Number.isFinite(pair.timeB));
+        const aToB=paired.filter((pair)=>pair.timeA<pair.timeB);
+        const bToA=paired.filter((pair)=>pair.timeB<pair.timeA);
+        const aToBSchedules=aToB.map((pair)=>pair.fromA);
+        const bToASchedules=bToA.map((pair)=>pair.fromB);
+        const aToBDestinations=aToB.map((pair)=>pair.fromB);
+        const bToADestinations=bToA.map((pair)=>pair.fromA);
+        render(el.inbound,aToBSchedules,aPredRecords,alertRecords,aToBDestinations,bPredRecords);
+        render(el.outbound,bToASchedules,bPredRecords,alertRecords,bToADestinations,aPredRecords);
+        return;
+      }
+
+      const recordDirection=(record)=>{const raw=record?.attributes?.direction_id;const value=Number(raw);return Number.isFinite(value)?value:null};
+      const byDirection=(items,dir)=>items.filter((item)=>recordDirection(item)===dir);
+      const nextEpoch=(items)=>items.map((item)=>new Date(time(item)).getTime()).filter(Number.isFinite).filter((epoch)=>epoch>Date.now()).sort((a,b)=>a-b)[0]??null;
+      const dirSnapshot=[0,1].map((dir)=>({dir,a:byDirection(aScheduleRecords,dir),b:byDirection(bScheduleRecords,dir)})).map((entry)=>({...entry,nextA:nextEpoch(entry.a),nextB:nextEpoch(entry.b)}));
+
+      let inboundDir=(dirSnapshot.find((entry)=>entry.nextA!==null&&entry.nextB!==null&&entry.nextA<entry.nextB)||{}).dir;
+      let outboundDir=(dirSnapshot.find((entry)=>entry.nextA!==null&&entry.nextB!==null&&entry.nextB<entry.nextA)||{}).dir;
+      if(inboundDir===undefined&&outboundDir!==undefined)inboundDir=outboundDir===0?1:0;
+      if(outboundDir===undefined&&inboundDir!==undefined)outboundDir=inboundDir===0?1:0;
+      if(inboundDir===undefined)inboundDir=(dirSnapshot.find((entry)=>entry.a.length)||{}).dir;
+      if(outboundDir===undefined)outboundDir=(dirSnapshot.find((entry)=>entry.b.length&&entry.dir!==inboundDir)||dirSnapshot.find((entry)=>entry.b.length)||{}).dir;
+
+      const hasDirections=dirSnapshot.some((entry)=>entry.a.length||entry.b.length);
+      const inboundSchedules=hasDirections&&inboundDir!==undefined?byDirection(aScheduleRecords,inboundDir):aScheduleRecords;
+      const outboundSchedules=hasDirections&&outboundDir!==undefined?byDirection(bScheduleRecords,outboundDir):bScheduleRecords;
+      const inboundDestinations=hasDirections&&inboundDir!==undefined?byDirection(bScheduleRecords,inboundDir):bScheduleRecords;
+      const outboundDestinations=hasDirections&&outboundDir!==undefined?byDirection(aScheduleRecords,outboundDir):aScheduleRecords;
+      const inboundPredictions=hasDirections&&inboundDir!==undefined?byDirection(aPredRecords,inboundDir):aPredRecords;
+      const outboundPredictions=hasDirections&&outboundDir!==undefined?byDirection(bPredRecords,outboundDir):bPredRecords;
+      const inboundDestPredictions=hasDirections&&inboundDir!==undefined?byDirection(bPredRecords,inboundDir):bPredRecords;
+      const outboundDestPredictions=hasDirections&&outboundDir!==undefined?byDirection(aPredRecords,outboundDir):aPredRecords;
+
+      render(el.inbound,inboundSchedules,inboundPredictions,alertRecords,inboundDestinations,inboundDestPredictions);
+      render(el.outbound,outboundSchedules,outboundPredictions,alertRecords,outboundDestinations,outboundDestPredictions);
+    }
     async function load(){if(loadInFlight)return;loadInFlight=true;el.status.textContent='Checking live departures...';el.dot.className='status-dot loading';el.refresh.disabled=true;try{if(isParisTransit(currentTransit)){await loadParis()}else{await loadBoston()}el.status.textContent=isParisTransit(currentTransit)&&parisUsedEstimatedFallback?'Scheduled data only':'Live data connected';el.updated.textContent=`Updated ${new Intl.DateTimeFormat(undefined,{hour:'numeric',minute:'2-digit'}).format(new Date())}`;el.dot.className=isParisTransit(currentTransit)&&parisUsedEstimatedFallback?'status-dot scheduled':'status-dot connected'}catch(error){console.error(error);el.inbound.innerHTML=el.outbound.innerHTML='<div class="empty-state">Live data temporarily unavailable</div>';el.status.textContent=`Could not reach ${isParisTransit(currentTransit)?'Île-de-France Mobilités':'MBTA'} live data`;el.dot.className='status-dot error';el.updated.textContent=''}finally{loadInFlight=false;el.refresh.disabled=false}}
     function replaceTransitInUrl(transit){const url=new URL(location.href);url.searchParams.set('transit',canonicalTransit(transit));history.replaceState({},'',url)}
     async function initialize(){try{currentTransit=canonicalTransit(currentTransit);loadTransitSelectionFromStorage(currentTransit);routes=await loadRoutesForTransit(currentTransit);if(!routes.some((route)=>route.id===selectedRouteId)){const profile=profileForTransit(currentTransit);selectedRouteId=profile.defaultRouteId&&routes.some((route)=>route.id===profile.defaultRouteId)?profile.defaultRouteId:routes[0]?.id||''}await prepareRoute(selectedRouteId,false);updateRouteText();document.documentElement.classList.add('transit-ready');load()}catch(error){console.error(error);updateRouteText();document.documentElement.classList.add('transit-ready');setStatusMessage(`Could not load ${isParisTransit(currentTransit)?'Paris':'MBTA'} lines`,'error');el.inbound.innerHTML=el.outbound.innerHTML='<div class="empty-state">Live data temporarily unavailable</div>'}}
