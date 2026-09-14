@@ -32,6 +32,11 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlencode, urlparse
 from urllib.request import Request, urlopen
 
+from app.map_snapshot import (
+    extract_mbta_vehicle_snapshot,
+    unavailable_snapshot,
+)
+
 PRIM_API = 'https://prim.iledefrance-mobilites.fr/marketplace'
 MBTA_API = 'https://api-v3.mbta.com'
 IDFM_DATA_API = 'https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/arrets-lignes/records'
@@ -529,6 +534,34 @@ def fetch_and_cache(transit: str, endpoint: str, query: Optional[Dict[str, Any]]
     return cache_store[key]
 
 
+def build_vehicle_snapshot(transit: str, query: Optional[Dict[str, Any]] = None):
+    normalized = canonical_transit_name(transit)
+    trip = (query or {}).get('trip')
+    if not trip:
+        return {
+            'status': 'error',
+            'data': unavailable_snapshot(normalized, '', 'Missing trip identifier for snapshot map.'),
+            'message': 'Missing trip identifier for snapshot map.',
+        }
+
+    if normalized == 'paris':
+        return {
+            'status': 'warning',
+            'data': unavailable_snapshot(normalized, trip, 'Paris live vehicle coordinates are not exposed by the current feed.'),
+            'message': 'Paris live vehicle coordinates are not exposed by the current feed.',
+        }
+
+    payload = fetch_upstream(normalized, '/vehicles', {'filter[trip]': trip, 'page[limit]': '10'})
+    snapshot = extract_mbta_vehicle_snapshot(payload, normalized, trip)
+    if snapshot:
+        return {'status': 'ok', 'data': snapshot}
+    return {
+        'status': 'warning',
+        'data': unavailable_snapshot(normalized, trip, 'No live vehicle position is available yet for this departure.'),
+        'message': 'No live vehicle position is available yet for this departure.',
+    }
+
+
 def get_cached_payload(transit: str, endpoint: str, query: Optional[Dict[str, Any]] = None):
     key = read_cache_key(transit, endpoint, query)
     with cache_lock:
@@ -704,6 +737,25 @@ class TransitCacheHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps({'status': 'ok', 'data': payload}).encode('utf-8'))
                 return
+
+            if request_path in ('/api/map', '/map'):
+                try:
+                    payload = build_vehicle_snapshot(transit, request_query)
+                    body = {'status': payload.get('status', 'ok'), 'data': payload.get('data', {})}
+                    if payload.get('message'):
+                        body['message'] = payload['message']
+                    self.send_response(200 if payload.get('status') != 'error' else 400)
+                    self.send_header('Cache-Control', 'no-store')
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps(body).encode('utf-8'))
+                    return
+                except Exception as exc:
+                    self.send_response(503)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'status': 'error', 'message': http_error_text(exc)}).encode('utf-8'))
+                    return
 
             if request_path in ('/api/cache', '/cache') or request_path.startswith('/api/cache/'):
                 try:

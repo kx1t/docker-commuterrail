@@ -79,6 +79,8 @@ The reverse proxy can route that to the cache service or to a static frontend th
 
 The page uses a dedicated settings popup (cogwheel icon next to refresh) for all user configuration changes. Transit authority, line, and origin/destination stop selection are now all managed in that popup, optimized for mobile use.
 
+Projected departures also have a snapshot-only map dialog that opens from each row. It uses Leaflet with OpenStreetMap tiles, so it does not require a separate map key or license account. The map captures a vehicle position once when opened and does not auto-refresh unless the user reopens it or refreshes the departures list.
+
 The main view no longer uses clickable provider or line labels for switching. The same refresh icon style is used on both the main screen and the cache diagnostics screen.
 
 For Paris and Boston variants, the frontend calls the cache endpoint rather than hitting upstream APIs directly. The cache maintains a 60-second TTL and serves stale data only if the server cannot refresh it after a recent request; the browser then shows an inline warning or error message.

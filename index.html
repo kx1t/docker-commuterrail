@@ -512,6 +512,91 @@
       text-decoration-color: var(--orange);
       word-break: break-word;
     }
+    .map-dialog {
+      width: min(100vw - 18px, 880px);
+      max-width: 880px;
+      min-height: min(90vh, 820px);
+      border: 0;
+      border-radius: 22px;
+      padding: 0;
+      background: #f5f7f8;
+      box-shadow: 0 24px 60px rgba(16,42,67,0.28);
+    }
+    .map-dialog::backdrop {
+      background: rgba(16,42,67,0.55);
+    }
+    .map-page {
+      display: flex;
+      flex-direction: column;
+      height: min(90vh, 820px);
+      font-family: var(--sans);
+      color: var(--ink);
+    }
+    .map-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 18px 18px 14px;
+      border-bottom: 1px solid var(--rule);
+      background: linear-gradient(180deg, #edf5f1, #f5f7f8);
+    }
+    .map-header h2 {
+      margin: 0;
+      font-size: clamp(22px, 5vw, 32px);
+      letter-spacing: -0.04em;
+    }
+    .map-close {
+      border: 1px solid var(--rule);
+      background: white;
+      color: var(--ink);
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .map-body {
+      display: grid;
+      grid-template-rows: auto minmax(260px, 1fr);
+      gap: 12px;
+      flex: 1;
+      overflow: hidden;
+      padding: 16px 18px 18px;
+    }
+    .map-copy {
+      display: grid;
+      gap: 4px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .map-copy strong {
+      color: var(--ink);
+      font-size: 15px;
+    }
+    .map-canvas {
+      min-height: 280px;
+      border-radius: 18px;
+      overflow: hidden;
+      border: 1px solid var(--rule);
+      background: linear-gradient(135deg, #eef4f8, #fff4eb);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4);
+    }
+    .map-status {
+      padding: 10px 12px;
+      border: 1px solid var(--rule);
+      border-radius: 12px;
+      background: rgba(255,255,255,0.82);
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.45;
+    }
+    .map-status.error {
+      color: var(--red);
+    }
+    .map-status.ok {
+      color: var(--green);
+    }
     @media (max-width: 680px) {
       .header-actions {
         gap: 6px;
@@ -534,6 +619,10 @@
       }
       .settings-dialog,
       .about-dialog {
+        width: calc(100vw - 12px);
+        min-height: 92vh;
+      }
+      .map-dialog {
         width: calc(100vw - 12px);
         min-height: 92vh;
       }
@@ -614,6 +703,22 @@
       </div>
       <div class="stats-body" id="stats-body">
         <div class="loading-state">Loading cache diagnostics…</div>
+      </div>
+    </div>
+  </dialog>
+  <dialog id="map-dialog" class="map-dialog" aria-labelledby="map-title">
+    <div class="map-page">
+      <div class="map-header">
+        <h2 id="map-title">Live vehicle snapshot</h2>
+        <button type="button" class="map-close" id="map-close">Close</button>
+      </div>
+      <div class="map-body">
+        <div class="map-copy" id="map-copy">
+          <strong id="map-subtitle">Select a departure to view its live position.</strong>
+          <span id="map-note">Snapshot only. Refresh the departures page to capture a newer location.</span>
+        </div>
+        <div class="map-status" id="map-status">No snapshot loaded yet.</div>
+        <div class="map-canvas" id="map-canvas" aria-label="Vehicle position map"></div>
       </div>
     </div>
   </dialog>
@@ -841,6 +946,13 @@
       statsBody:document.querySelector('#stats-body'),
       statsClose:document.querySelector('#stats-close'),
       statsRefresh:document.querySelector('#stats-refresh'),
+      mapDialog:document.querySelector('#map-dialog'),
+      mapClose:document.querySelector('#map-close'),
+      mapTitle:document.querySelector('#map-title'),
+      mapSubtitle:document.querySelector('#map-subtitle'),
+      mapNote:document.querySelector('#map-note'),
+      mapStatus:document.querySelector('#map-status'),
+      mapCanvas:document.querySelector('#map-canvas'),
       tipsDialog:document.querySelector('#tips-dialog'),
       tipsClose:document.querySelector('#tips-close'),
       helpLink:document.querySelector('#help-link'),
@@ -864,6 +976,11 @@
     let settingsRouteId='';
     let settingsRemoteId='';
     let settingsEndpointId='';
+    let mapLibraryPromise=null;
+    let mapInstance=null;
+    let mapMarker=null;
+    let mapTileLayer=null;
+    const departureMapRegistry=new Map();
 
     function setStatusMessage(text, tone='info'){
       if (!text) return;
@@ -884,6 +1001,7 @@
     const displayTime=(v)=>new Intl.DateTimeFormat(undefined,{hour:'numeric',minute:'2-digit'}).format(new Date(v));
     const windowParams=()=>{const n=new Date(),earlier=new Date(n.getTime()-24*3600000),later=new Date(n.getTime()+18*3600000);return{min_time:earlier.toISOString(),max_time:later.toISOString(),'page[limit]':'100'}};
     const cacheRequest=async(transit,endpoint,query={})=>{const params=new URLSearchParams({transit:canonicalTransit(transit),path:endpoint,query:JSON.stringify(query)});const baseUrl=window.location.pathname.endsWith('/')?window.location.href:`${window.location.href}/`;const response=await fetch(new URL(`${CACHE_API}?${params.toString()}`,baseUrl));const payload=await response.json().catch(()=>({}));if(payload?.status==='warning'&&payload?.message){setStatusMessage(payload.message,'warning');return payload.data||{}}if(payload?.status==='error'){const message=payload.message||'Error: transit data is unavailable.';setStatusMessage(message,'error');throw Error(message)}if(!response.ok){const message=`Cache API returned ${response.status}`;setStatusMessage(message,'error');throw Error(message)}return payload.data||{}};
+    const mapRequest=async(transit,query={})=>{const params=new URLSearchParams({transit:canonicalTransit(transit),...Object.fromEntries(Object.entries(query).map(([key,value])=>[key,String(value)]))});const baseUrl=window.location.pathname.endsWith('/')?window.location.href:`${window.location.href}/`;const response=await fetch(new URL(`/api/map?${params.toString()}`,baseUrl));const payload=await response.json().catch(()=>({}));if(!response.ok&&payload?.message)throw Error(payload.message);return payload};
     async function mbta(path,query,transitOverride=currentTransit){return cacheRequest(canonicalTransit(transitOverride),path,query||{})}
     const sleep=(ms)=>new Promise((resolve)=>setTimeout(resolve,ms));
     async function prim(path,query={}){return cacheRequest('paris',path,query||{})}
@@ -907,6 +1025,11 @@
     async function syncSettingsTransit(nextTransit,preferDefaults=false){settingsTransit=canonicalTransit(nextTransit);const profile=profileForTransit(settingsTransit);const saved=readSavedSettings(settingsTransit);settingsRoutes=await loadRoutesForTransit(settingsTransit);settingsRouteId=saved.routeId||profile.defaultRouteId||settingsRoutes[0]?.id||'';if(!settingsRoutes.some((route)=>route.id===settingsRouteId)){settingsRouteId=settingsRoutes[0]?.id||''}populateSettingsLineOptions();settingsStops=await loadStopsForRoute(settingsTransit,settingsRouteId);if(!settingsStops.length)throw Error('No stations found for selected route');const ordered=orderedStations(settingsStops,settingsTransit);const first=ordered[0]?.id||settingsStops[0]?.id||'';const second=ordered.at(-1)?.id||settingsStops.find((station)=>station.id!==first)?.id||first;settingsEndpointId=preferDefaults?first:(saved.endpointId||first);settingsRemoteId=preferDefaults?second:(saved.remoteId||second);if(!settingsStops.some((station)=>station.id===settingsEndpointId)){settingsEndpointId=first}if(!settingsStops.some((station)=>station.id===settingsRemoteId)||settingsRemoteId===settingsEndpointId){settingsRemoteId=second}populateSettingsStopOptions()}
     async function openSettingsDialog(){populateSettingsAuthorityOptions();await syncSettingsTransit(currentTransit,false);if(typeof el.dialog.showModal==='function')el.dialog.showModal();else el.dialog.setAttribute('open','open')}
     function closeSettingsDialog(){if(typeof el.dialog.close==='function')el.dialog.close();else el.dialog.removeAttribute('open')}
+    async function loadLeaflet(){if(window.L&&window.L.map)return window.L;if(!mapLibraryPromise){mapLibraryPromise=new Promise((resolve,reject)=>{const cssId='leaflet-css';if(!document.getElementById(cssId)){const link=document.createElement('link');link.id=cssId;link.rel='stylesheet';link.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';link.integrity='sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=';link.crossOrigin='';document.head.appendChild(link)}const script=document.createElement('script');script.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';script.integrity='sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=';script.crossOrigin='';script.onload=()=>resolve(window.L);script.onerror=()=>reject(Error('Could not load map library'));document.head.appendChild(script)})}return mapLibraryPromise}
+    function resetMapDialog(){if(mapMarker&&mapInstance){mapInstance.removeLayer(mapMarker);mapMarker=null}if(mapTileLayer&&mapInstance){mapInstance.removeLayer(mapTileLayer);mapTileLayer=null}if(mapInstance){mapInstance.remove();mapInstance=null}if(el.mapCanvas)el.mapCanvas.innerHTML=''}
+    function updateMapStatus(text,tone='info'){if(!el.mapStatus)return;el.mapStatus.textContent=text;el.mapStatus.className=`map-status ${tone==='error'?'error':tone==='ok'?'ok':''}`.trim()}
+    async function openDepartureMap(mapKey){const snapshot=departureMapRegistry.get(mapKey);if(!snapshot)return;el.mapTitle.textContent='Live vehicle snapshot';el.mapSubtitle.textContent=snapshot.label;el.mapNote.textContent=isParisTransit(snapshot.transit)?'Snapshot only. Paris live vehicle coordinates are not exposed by this feed yet.':'Snapshot only. Reopen the map or refresh departures for a newer location.';updateMapStatus('Loading map snapshot…');resetMapDialog();if(typeof el.mapDialog.showModal==='function')el.mapDialog.showModal();else el.mapDialog.setAttribute('open','open');try{const payload=await mapRequest(snapshot.transit,{trip:snapshot.trip});const data=payload?.data||{};if(!data.available||data.latitude===undefined||data.longitude===undefined){updateMapStatus(data.reason||payload?.message||'Live vehicle position is unavailable for this departure.','error');return}const L=await loadLeaflet();if(!el.mapCanvas)return;mapInstance=L.map(el.mapCanvas,{zoomControl:true,scrollWheelZoom:false,attributionControl:true}).setView([data.latitude,data.longitude],14);mapTileLayer=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(mapInstance);mapMarker=L.marker([data.latitude,data.longitude]).addTo(mapInstance);const popParts=[snapshot.label,data.current_status?String(data.current_status):'',data.updated_at?`Updated ${new Intl.DateTimeFormat(undefined,{hour:'numeric',minute:'2-digit'}).format(new Date(data.updated_at))}`:''].filter(Boolean);mapMarker.bindPopup(popParts.join('<br>')).openPopup();updateMapStatus(`Pinned at ${data.latitude.toFixed(5)}, ${data.longitude.toFixed(5)}${data.bearing!==null&&data.bearing!==undefined?` · bearing ${Math.round(data.bearing)}°`:''}.`,'ok')}catch(error){console.error(error);updateMapStatus(error.message||'Could not load vehicle snapshot.','error')}}
+    function closeMapDialog(){resetMapDialog();if(typeof el.mapDialog.close==='function')el.mapDialog.close();else el.mapDialog.removeAttribute('open')}
     async function parisStops(route){const response=await cacheRequest('paris','/stops',{route:route.id});const raw=response?.results||[];const grouped=new Map();raw.filter((stop)=>stop.stop_id&&stop.stop_name).forEach((stop)=>{const key=stop.stop_name.trim(),entry=grouped.get(key)||{id:`station-${key.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}`,name:key,stopRefs:[],lon:Number(stop.stop_lon),lat:Number(stop.stop_lat)};entry.stopRefs.push(`STIF:StopPoint:Q:${stop.stop_id.replace(/^IDFM:/,'')}:`);if(Number.isFinite(Number(stop.stop_lon)))entry.lon=Number(stop.stop_lon);if(Number.isFinite(Number(stop.stop_lat)))entry.lat=Number(stop.stop_lat);grouped.set(key,entry)});const stops=[...grouped.values()].map((stop)=>({...stop,stopRefs:[...new Set(stop.stopRefs)]}));return orderedStations(stops)}
     const normalizeText=(value)=>(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
     const callTime=(call)=>(call?.ExpectedDepartureTime||call?.ExpectedArrivalTime||call?.AimedDepartureTime||call?.AimedArrivalTime||'');
@@ -915,9 +1038,9 @@
     function parisMonitoringItems(visits,originRefs,destinationName){const destinationTarget=normalizeText(destinationName),journeys=visits.map((visit,index)=>{const mvj=visit.MonitoredVehicleJourney||{},call=mvj.MonitoredCall||{},stopRef=(visit.MonitoringRef?.value||visit.MonitoringRef||call.StopPointRef?.value||'');return{DatedVehicleJourneyRef:mvj.FramedVehicleJourneyRef?.DatedVehicleJourneyRef||mvj.DatedVehicleJourneyRef||mvj.VehicleJourneyName||String(index),DestinationName:[{value:mvj.DestinationName?.[0]?.value||mvj.DestinationName?.value||mvj.DestinationShortName?.value||''}],EstimatedCalls:{EstimatedCall:[{StopPointRef:{value:stopRef},ExpectedDepartureTime:call.ExpectedDepartureTime,ExpectedArrivalTime:call.ExpectedArrivalTime,AimedDepartureTime:call.AimedDepartureTime,AimedArrivalTime:call.AimedArrivalTime}]}}});const parsed=parisDirectionItems(journeys,originRefs,[],destinationName,'stop-monitoring');if(!destinationTarget){return dedupeParisItems(parsed.originItems)}return dedupeParisItems(parsed.originItems.filter((item)=>{const match=journeys.find((j)=>{const journeyId=j.DatedVehicleJourneyRef?.value||j.DatedVehicleJourneyRef||j.VehicleJourneyRef?.value||j.VehicleJourneyRef||j.FramedVehicleJourneyRef?.DatedVehicleJourneyRef||'';return String(journeyId)===String(trip(item));});const label=(match?.DestinationName?.[0]?.value||match?.DestinationName?.value||match?.DestinationShortName?.value||'').trim();return !label || normalizeText(label)===destinationTarget;}))}
     async function loadParis(){const route=routeById(),[stationA,stationB]=selectedStations(),stationATarget=resolvedParisEndpoint(stationA,stationB),stationBTarget=resolvedParisEndpoint(stationB,stationA),stationARefs=stationA?.stopRefs||[],stationBRefs=stationB?.stopRefs||[],stationATargetRefs=stationATarget?.stopRefs||[],stationBTargetRefs=stationBTarget?.stopRefs||[];if(!route.lineRef||!stationARefs.length||!stationBRefs.length)throw Error('This Paris line or station is not configured for real-time data');const fetchVisits=async(ref)=>{const data=await prim(`/stop-monitoring?${new URLSearchParams({MonitoringRef:ref})}`);return(data.Siri?.ServiceDelivery?.StopMonitoringDelivery||[]).flatMap((delivery)=>delivery.MonitoredStopVisit||[])};const batchMap=async(items,fn,batchSize=2)=>{const results=[];for(let index=0;index<items.length;index+=batchSize){const chunk=items.slice(index,index+batchSize);const chunkResults=await Promise.all(chunk.map(fn));results.push(...chunkResults)}return results};const[aVisitsByRef,bVisitsByRef]=await Promise.all([batchMap(stationARefs,fetchVisits,2),batchMap(stationBRefs,fetchVisits,2)]);let inboundOrigin=parisMonitoringItems(aVisitsByRef.flat(),stationATargetRefs,stationBTarget?.name||''),outboundOrigin=parisMonitoringItems(bVisitsByRef.flat(),stationBTargetRefs,stationATarget?.name||'');const futureLiveItems=[...inboundOrigin,...outboundOrigin].filter((item)=>time(item)&&new Date(time(item)).getTime()>Date.now());if(futureLiveItems.length===0){const response=await prim(`/estimated-timetable?${new URLSearchParams({LineRef:route.lineRef})}`),delivery=response.Siri?.ServiceDelivery?.EstimatedTimetableDelivery?.[0],journeys=(delivery?.EstimatedJourneyVersionFrame||[]).flatMap((frame)=>frame.EstimatedVehicleJourney||[]),aToB=parisDirectionItems(journeys,stationARefs,stationATargetRefs,stationBTarget?.name||''),bToA=parisDirectionItems(journeys,stationBRefs,stationBTargetRefs,stationATarget?.name||'');inboundOrigin=dedupeParisItems(inboundOrigin.concat(aToB.originItems));outboundOrigin=dedupeParisItems(outboundOrigin.concat(bToA.originItems));}const liveParisItems=[...inboundOrigin,...outboundOrigin].filter((item)=>time(item)&&new Date(time(item)).getTime()>Date.now());parisUsedEstimatedFallback=liveParisItems.length===0;const predictionFor=(item)=>({id:item.id,attributes:{departure_time:time(item)},relationships:{trip:{data:{id:trip(item)||item.id}}}});const inboundPredictions=inboundOrigin.map(predictionFor),outboundPredictions=outboundOrigin.map(predictionFor);render(el.inbound,inboundOrigin,inboundPredictions,[],[],[]);render(el.outbound,outboundOrigin,outboundPredictions,[],[],[])}
     function alertFor(alerts,schedule){const id=trip(schedule);return alerts.find((a)=>{const x=a.attributes||{},text=`${x.header||''} ${x.description||''}`.toLowerCase();return /delay|late|hold|service disruption|suspend/.test(text)&&(!a.relationships?.trip?.data?.id||a.relationships.trip.data.id===id)})}
-    function train(record,predictions,alerts,destinationSchedules,destinationPredictions){const scheduled=time(record),prediction=predictions.find((p)=>trip(p)===trip(record)),live=prediction?.attributes?.departure_time||prediction?.attributes?.arrival_time,actual=live||scheduled,minutesUntil=Math.max(1,Math.floor((new Date(actual)-Date.now())/60000)),delay=live?(new Date(live)-new Date(scheduled))/1000:0,delayed=Math.abs(delay)>=60,arrivalSchedule=destinationSchedules.find((r)=>trip(r)===trip(record)),arrivalPrediction=destinationPredictions.find((p)=>trip(p)===trip(record)),liveArrival=arrivalPrediction?.attributes?.arrival_time||arrivalPrediction?.attributes?.departure_time,arrival=liveArrival||(delayed?null:arrivalSchedule?.attributes?.arrival_time||arrivalSchedule?.attributes?.departure_time),platform=String(prediction?.attributes?.platform_name||'').trim(),alert=alertFor(alerts,record),isParisEstimatedFallback=isParisTransit(currentTransit)&&parisUsedEstimatedFallback&&String(record?.id||'').startsWith('estimated-timetable-');let note=isParisEstimatedFallback?'Scheduled':'On time',klass=isParisEstimatedFallback?'watch':'';if(delayed){note=`${delay<0?'Early':'Delayed'} ${Math.max(1,Math.round(Math.abs(delay)/60))} min`;klass=delay>0?'delayed':'watch'}else if(alert){note='Line alert reported';klass='watch'}const label=`Scheduled ${displayTime(scheduled)}${arrival?` · Arrives ${displayTime(arrival)}`:''}${platform?` · Platform ${escapeHtml(platform)}`:''}`;return `<article class="train-row"><div><p class="train-time">${displayTime(actual).replace(' AM','<small>AM</small>').replace(' PM','<small>PM</small>')}<small class="countdown">in ${minutesUntil} mins</small></p><p class="train-meta">${label}</p></div><span class="delay-note ${klass}">${note}</span></article>`}
+    function train(record,predictions,alerts,destinationSchedules,destinationPredictions,mapKey){const scheduled=time(record),prediction=predictions.find((p)=>trip(p)===trip(record)),live=prediction?.attributes?.departure_time||prediction?.attributes?.arrival_time,actual=live||scheduled,minutesUntil=Math.max(1,Math.floor((new Date(actual)-Date.now())/60000)),delay=live?(new Date(live)-new Date(scheduled))/1000:0,delayed=Math.abs(delay)>=60,arrivalSchedule=destinationSchedules.find((r)=>trip(r)===trip(record)),arrivalPrediction=destinationPredictions.find((p)=>trip(p)===trip(record)),liveArrival=arrivalPrediction?.attributes?.arrival_time||arrivalPrediction?.attributes?.departure_time,arrival=liveArrival||(delayed?null:arrivalSchedule?.attributes?.arrival_time||arrivalSchedule?.attributes?.departure_time),platform=String(prediction?.attributes?.platform_name||'').trim(),alert=alertFor(alerts,record),isParisEstimatedFallback=isParisTransit(currentTransit)&&parisUsedEstimatedFallback&&String(record?.id||'').startsWith('estimated-timetable-');let note=isParisEstimatedFallback?'Scheduled':'On time',klass=isParisEstimatedFallback?'watch':'';if(delayed){note=`${delay<0?'Early':'Delayed'} ${Math.max(1,Math.round(Math.abs(delay)/60))} min`;klass=delay>0?'delayed':'watch'}else if(alert){note='Line alert reported';klass='watch'}const label=`Scheduled ${displayTime(scheduled)}${arrival?` · Arrives ${displayTime(arrival)}`:''}${platform?` · Platform ${escapeHtml(platform)}`:''}`;return `<article class="train-row"><div><p class="train-time">${displayTime(actual).replace(' AM','<small>AM</small>').replace(' PM','<small>PM</small>')}<small class="countdown">in ${minutesUntil} mins</small></p><p class="train-meta">${label}</p><button type="button" class="departure-map-button" data-map-key="${escapeHtml(mapKey)}">Map</button></div><span class="delay-note ${klass}">${note}</span></article>`}
     function departureFor(record,predictions){const prediction=predictions.find((p)=>trip(p)===trip(record)),predicted=prediction?.attributes?.departure_time||prediction?.attributes?.arrival_time;return predicted||time(record)}
-    function render(target,items,predictions,alerts,destinationSchedules,destinationPredictions){const now=Date.now(),upcoming=items.filter((r)=>time(r)&&new Date(departureFor(r,predictions)).getTime()>now).sort((a,b)=>new Date(departureFor(a,predictions))-new Date(departureFor(b,predictions))).slice(0,2);target.innerHTML=upcoming.length?upcoming.map((r)=>train(r,predictions,alerts,destinationSchedules,destinationPredictions)).join(''):'<div class="empty-state">No more departures found</div>'}
+    function render(target,items,predictions,alerts,destinationSchedules,destinationPredictions,context={}){const now=Date.now(),upcoming=items.filter((r)=>time(r)&&new Date(departureFor(r,predictions)).getTime()>now).sort((a,b)=>new Date(departureFor(a,predictions))-new Date(departureFor(b,predictions))).slice(0,2);target.innerHTML=upcoming.length?upcoming.map((r)=>{const mapKey=`${context.side||'panel'}:${context.transit||currentTransit}:${trip(r)||r.id}:${time(r)||''}`;departureMapRegistry.set(mapKey,{trip:trip(r)||'',transit:context.transit||currentTransit,label:`${context.sideLabel||'Departure'} · ${displayTime(departureFor(r,predictions))}`});return train(r,predictions,alerts,destinationSchedules,destinationPredictions,mapKey)}).join(''):'<div class="empty-state">No more departures found</div>'}
     async function loadBoston(){
       const [stationA,stationB]=selectedStations();
       if(!stationA||!stationB)throw Error('Station selection is incomplete');
@@ -946,8 +1069,8 @@
         const bToASchedules=bToA.map((pair)=>pair.fromB);
         const aToBDestinations=aToB.map((pair)=>pair.fromB);
         const bToADestinations=bToA.map((pair)=>pair.fromA);
-        render(el.inbound,aToBSchedules,aPredRecords,alertRecords,aToBDestinations,bPredRecords);
-        render(el.outbound,bToASchedules,bPredRecords,alertRecords,bToADestinations,aPredRecords);
+        render(el.inbound,aToBSchedules,aPredRecords,alertRecords,aToBDestinations,bPredRecords,{side:'inbound',transit:currentTransit,sideLabel:'Inbound'});
+        render(el.outbound,bToASchedules,bPredRecords,alertRecords,bToADestinations,aPredRecords,{side:'outbound',transit:currentTransit,sideLabel:'Outbound'});
         return;
       }
 
@@ -973,10 +1096,10 @@
       const inboundDestPredictions=hasDirections&&inboundDir!==undefined?byDirection(bPredRecords,inboundDir):bPredRecords;
       const outboundDestPredictions=hasDirections&&outboundDir!==undefined?byDirection(aPredRecords,outboundDir):aPredRecords;
 
-      render(el.inbound,inboundSchedules,inboundPredictions,alertRecords,inboundDestinations,inboundDestPredictions);
-      render(el.outbound,outboundSchedules,outboundPredictions,alertRecords,outboundDestinations,outboundDestPredictions);
+      render(el.inbound,inboundSchedules,inboundPredictions,alertRecords,inboundDestinations,inboundDestPredictions,{side:'inbound',transit:currentTransit,sideLabel:'Inbound'});
+      render(el.outbound,outboundSchedules,outboundPredictions,alertRecords,outboundDestinations,outboundDestPredictions,{side:'outbound',transit:currentTransit,sideLabel:'Outbound'});
     }
-    async function load(){if(loadInFlight)return;loadInFlight=true;el.status.textContent='Checking live departures...';el.dot.className='status-dot loading';el.refresh.disabled=true;try{if(isParisTransit(currentTransit)){await loadParis()}else{await loadBoston()}el.status.textContent=isParisTransit(currentTransit)&&parisUsedEstimatedFallback?'Scheduled data only':'Live data connected';el.updated.textContent=`Updated ${new Intl.DateTimeFormat(undefined,{hour:'numeric',minute:'2-digit'}).format(new Date())}`;el.dot.className=isParisTransit(currentTransit)&&parisUsedEstimatedFallback?'status-dot scheduled':'status-dot connected'}catch(error){console.error(error);el.inbound.innerHTML=el.outbound.innerHTML='<div class="empty-state">Live data temporarily unavailable</div>';el.status.textContent=`Could not reach ${isParisTransit(currentTransit)?'Île-de-France Mobilités':'MBTA'} live data`;el.dot.className='status-dot error';el.updated.textContent=''}finally{loadInFlight=false;el.refresh.disabled=false}}
+    async function load(){if(loadInFlight)return;loadInFlight=true;departureMapRegistry.clear();el.status.textContent='Checking live departures...';el.dot.className='status-dot loading';el.refresh.disabled=true;try{if(isParisTransit(currentTransit)){await loadParis()}else{await loadBoston()}el.status.textContent=isParisTransit(currentTransit)&&parisUsedEstimatedFallback?'Scheduled data only':'Live data connected';el.updated.textContent=`Updated ${new Intl.DateTimeFormat(undefined,{hour:'numeric',minute:'2-digit'}).format(new Date())}`;el.dot.className=isParisTransit(currentTransit)&&parisUsedEstimatedFallback?'status-dot scheduled':'status-dot connected'}catch(error){console.error(error);el.inbound.innerHTML=el.outbound.innerHTML='<div class="empty-state">Live data temporarily unavailable</div>';el.status.textContent=`Could not reach ${isParisTransit(currentTransit)?'Île-de-France Mobilités':'MBTA'} live data`;el.dot.className='status-dot error';el.updated.textContent=''}finally{loadInFlight=false;el.refresh.disabled=false}}
     function replaceTransitInUrl(transit){const url=new URL(location.href);url.searchParams.set('transit',canonicalTransit(transit));history.replaceState({},'',url)}
     async function initialize(){try{currentTransit=canonicalTransit(currentTransit);loadTransitSelectionFromStorage(currentTransit);routes=await loadRoutesForTransit(currentTransit);if(!routes.some((route)=>route.id===selectedRouteId)){const profile=profileForTransit(currentTransit);selectedRouteId=profile.defaultRouteId&&routes.some((route)=>route.id===profile.defaultRouteId)?profile.defaultRouteId:routes[0]?.id||''}await prepareRoute(selectedRouteId,false);updateRouteText();document.documentElement.classList.add('transit-ready');load()}catch(error){console.error(error);updateRouteText();document.documentElement.classList.add('transit-ready');setStatusMessage(`Could not load ${isParisTransit(currentTransit)?'Paris':'MBTA'} lines`,'error');el.inbound.innerHTML=el.outbound.innerHTML='<div class="empty-state">Live data temporarily unavailable</div>'}}
     function formatStatsTimestamp(value, isUnixSeconds = false) {
@@ -1182,6 +1305,11 @@
     if (el.helpLink) el.helpLink.addEventListener('click', openTipsDialog);
     if (el.tipsClose) el.tipsClose.addEventListener('click', closeTipsDialog);
     if (el.aboutClose) el.aboutClose.addEventListener('click', closeAboutDialog);
+    if (el.mapClose) el.mapClose.addEventListener('click', closeMapDialog);
+    if (el.mapDialog) el.mapDialog.addEventListener('click', (event) => { if (event.target === el.mapDialog) closeMapDialog(); });
+    const handleDepartureMapClick=(event)=>{const button=event.target.closest?.('.departure-map-button');if(!button)return;const mapKey=button.getAttribute('data-map-key')||'';if(!mapKey)return;openDepartureMap(mapKey)};
+    if (el.inbound) el.inbound.addEventListener('click', handleDepartureMapClick);
+    if (el.outbound) el.outbound.addEventListener('click', handleDepartureMapClick);
     if (el.settingsButton) el.settingsButton.addEventListener('click', openSettingsDialog);
     if (el.cancelSettings) el.cancelSettings.addEventListener('click', closeSettingsDialog);
     if (el.settingsOpenStats) el.settingsOpenStats.addEventListener('click', openStatsDialog);
