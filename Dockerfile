@@ -35,6 +35,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 COPY README.md /app/README.md
 COPY app/server.py /app/app/server.py
+COPY app/map_snapshot.py /app/app/map_snapshot.py
 COPY index.html /app/index.html
 
 ARG GIT_COMMIT=unknown
