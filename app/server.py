@@ -753,7 +753,12 @@ class TransitCacheHandler(BaseHTTPRequestHandler):
 
             if request_path in ('/api/map', '/map'):
                 try:
-                    payload = build_vehicle_snapshot(transit, request_query)
+                    map_query = dict(request_query or {})
+                    for key in ('trip', 'route', 'monitoring_ref'):
+                        raw_value = query.get(key, [None])[0]
+                        if raw_value and key not in map_query:
+                            map_query[key] = raw_value
+                    payload = build_vehicle_snapshot(transit, map_query)
                     body = {'status': payload.get('status', 'ok'), 'data': payload.get('data', {})}
                     if payload.get('message'):
                         body['message'] = payload['message']
