@@ -559,7 +559,7 @@ def build_vehicle_snapshot(transit: str, query: Optional[Dict[str, Any]] = None)
 
     try:
         payload = fetch_upstream(normalized, '/vehicles', {'filter[trip]': trip, 'page[limit]': '10'})
-    except (HTTPError, URLError, TimeoutError, RuntimeError) as exc:
+    except Exception as exc:
         return {
             'status': 'warning',
             'data': unavailable_snapshot(normalized, trip, f'Live vehicle position could not be retrieved right now. {http_error_text(exc)}'),
