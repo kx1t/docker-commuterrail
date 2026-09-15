@@ -21,6 +21,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PORT=80 \
     CACHE_TTL_SECONDS=60 \
+    Cache-Time-Boston-Schedule=1800 \
+    Cache-Time-Boston-Prediction=60 \
+    Cache-Time-Boston-Vehicle=60 \
+    Cache-Time-Boston-Alert=120 \
+    Cache-Time-Boston-Stop=43200 \
+    Cache-Time-Boston-Route=43200 \
+    Cache-Time-Boston-Trip=43200 \
+    Cache-Time-Paris-Default=60 \
     HTTP_WORKERS=10 \
     PRIM_API_KEY=""
 

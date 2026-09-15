@@ -478,9 +478,36 @@
     }
     .settings-field {
       display: grid;
+    .map-auto-refresh {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+      color: var(--ink);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+    .map-auto-refresh input {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--green);
+    }
       gap: 7px;
     }
     .settings-field label {
+    .occupancy-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      margin-right: 6px;
+      vertical-align: -4px;
+      color: var(--green);
+    }
+    .occupancy-icon.yellow { color: #bd8700; }
+    .occupancy-icon.red { color: var(--red); }
+    .occupancy-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
       font-family: var(--mono);
       font-size: 10px;
       letter-spacing: 0.08em;
@@ -847,6 +874,10 @@
         <div class="map-copy" id="map-copy">
           <strong id="map-subtitle">Select a departure to view its live position.</strong>
           <span id="map-note">Refresh the map to update.</span>
+          <label class="map-auto-refresh" for="map-auto-refresh">
+            <input type="checkbox" id="map-auto-refresh">
+            <span>Auto Refresh</span>
+          </label>
         </div>
         <div class="map-canvas" id="map-canvas" aria-label="Vehicle position map"></div>
       </div>
@@ -1081,6 +1112,7 @@
       mapTitle:document.querySelector('#map-title'),
       mapSubtitle:document.querySelector('#map-subtitle'),
       mapNote:document.querySelector('#map-note'),
+      mapAutoRefresh:document.querySelector('#map-auto-refresh'),
       mapRefresh:document.querySelector('#map-refresh'),
       mapCanvas:document.querySelector('#map-canvas'),
       tipsDialog:document.querySelector('#tips-dialog'),
@@ -1110,6 +1142,8 @@
     let mapInstance=null;
     let mapMarker=null;
     let mapTileLayer=null;
+    let mapAutoRefreshTimer=null;
+    const MAP_AUTO_REFRESH_KEY='transit-map-auto-refresh';
     const departureMapRegistry=new Map();
 
     function setStatusMessage(text, tone='info'){
@@ -1159,10 +1193,13 @@
     function resetMapDialog(){if(mapMarker&&mapInstance){mapInstance.removeLayer(mapMarker);mapMarker=null}if(mapTileLayer&&mapInstance){mapInstance.removeLayer(mapTileLayer);mapTileLayer=null}if(mapInstance){mapInstance.remove();mapInstance=null}if(el.mapCanvas)el.mapCanvas.innerHTML=''}
     function updateMapStatus(text,tone='info'){if(!el.mapNote)return;el.mapNote.textContent=text;el.mapNote.className=tone==='error'?'error':''}
     let currentMapSnapshot=null;
+    function readMapAutoRefresh(){try{return localStorage.getItem(MAP_AUTO_REFRESH_KEY)==='true'}catch{return false}}
+    function writeMapAutoRefresh(value){try{localStorage.setItem(MAP_AUTO_REFRESH_KEY,String(value))}catch{} }
+    function syncMapAutoRefresh(){if(mapAutoRefreshTimer){clearInterval(mapAutoRefreshTimer);mapAutoRefreshTimer=null}if(el.mapAutoRefresh?.checked){mapAutoRefreshTimer=setInterval(()=>{if(currentMapSnapshot)refreshDepartureMap()},60000)}}
     async function refreshDepartureMap(){if(currentMapSnapshot)await loadDepartureMap(currentMapSnapshot)}
     async function loadDepartureMap(snapshot){currentMapSnapshot=snapshot;const minutesUntil=Math.max(1,Math.round((new Date(snapshot.expectedAt).getTime()-Date.now())/60000));el.mapTitle.textContent='Current vehicle location';el.mapSubtitle.textContent=`Expected in ${snapshot.station} in ${minutesUntil} minute${minutesUntil===1?'':'s'}`;el.mapNote.textContent='Refresh the map to update.';el.mapNote.className='';resetMapDialog();try{const payload=await mapRequest(snapshot.transit,{trip:snapshot.trip,vehicle:snapshot.vehicle,route:snapshot.route,monitoring_ref:snapshot.monitoringRef});const data=payload?.data||{};if(!data.available||data.latitude===undefined||data.longitude===undefined){updateMapStatus(data.reason||payload?.message||'Live vehicle position is unavailable for this departure.','error');return}const L=await loadLeaflet();if(!el.mapCanvas)return;mapInstance=L.map(el.mapCanvas,{zoomControl:true,scrollWheelZoom:false,attributionControl:true}).setView([data.latitude,data.longitude],14);mapTileLayer=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(mapInstance);mapMarker=L.marker([data.latitude,data.longitude]).addTo(mapInstance);const updatedTime=data.updated_at?`Updated ${new Intl.DateTimeFormat(undefined,{hour:'numeric',minute:'2-digit'}).format(new Date(data.updated_at))}`:'';if(updatedTime)mapMarker.bindPopup(updatedTime,{closeButton:false}).openPopup()}catch(error){console.error(error);updateMapStatus(error.message||'Could not load vehicle snapshot.','error')}}
-    async function openDepartureMap(mapKey){const snapshot=departureMapRegistry.get(mapKey);if(!snapshot)return;currentMapSnapshot=snapshot;if(typeof el.mapDialog.showModal==='function')el.mapDialog.showModal();else el.mapDialog.setAttribute('open','open');await loadDepartureMap(snapshot)}
-    function closeMapDialog(){resetMapDialog();if(typeof el.mapDialog.close==='function')el.mapDialog.close();else el.mapDialog.removeAttribute('open')}
+    async function openDepartureMap(mapKey){const snapshot=departureMapRegistry.get(mapKey);if(!snapshot)return;currentMapSnapshot=snapshot;if(el.mapAutoRefresh)el.mapAutoRefresh.checked=readMapAutoRefresh();if(typeof el.mapDialog.showModal==='function')el.mapDialog.showModal();else el.mapDialog.setAttribute('open','open');syncMapAutoRefresh();await loadDepartureMap(snapshot)}
+    function closeMapDialog(){if(mapAutoRefreshTimer){clearInterval(mapAutoRefreshTimer);mapAutoRefreshTimer=null}resetMapDialog();if(typeof el.mapDialog.close==='function')el.mapDialog.close();else el.mapDialog.removeAttribute('open')}
     async function parisStops(route){const response=await cacheRequest('paris','/stops',{route:route.id});const raw=response?.results||[];const grouped=new Map();raw.filter((stop)=>stop.stop_id&&stop.stop_name).forEach((stop)=>{const key=stop.stop_name.trim(),entry=grouped.get(key)||{id:`station-${key.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}`,name:key,stopRefs:[],lon:Number(stop.stop_lon),lat:Number(stop.stop_lat)};entry.stopRefs.push(`STIF:StopPoint:Q:${stop.stop_id.replace(/^IDFM:/,'')}:`);if(Number.isFinite(Number(stop.stop_lon)))entry.lon=Number(stop.stop_lon);if(Number.isFinite(Number(stop.stop_lat)))entry.lat=Number(stop.stop_lat);grouped.set(key,entry)});const stops=[...grouped.values()].map((stop)=>({...stop,stopRefs:[...new Set(stop.stopRefs)]}));return orderedStations(stops)}
     const normalizeText=(value)=>(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
     const callTime=(call)=>(call?.ExpectedDepartureTime||call?.ExpectedArrivalTime||call?.AimedDepartureTime||call?.AimedArrivalTime||'');
@@ -1171,24 +1208,27 @@
     function parisMonitoringItems(visits,originRefs,destinationName){const destinationTarget=normalizeText(destinationName),journeys=visits.map((visit,index)=>{const mvj=visit.MonitoredVehicleJourney||{},call=mvj.MonitoredCall||{},stopRef=(visit.MonitoringRef?.value||visit.MonitoringRef||call.StopPointRef?.value||'');return{DatedVehicleJourneyRef:mvj.FramedVehicleJourneyRef?.DatedVehicleJourneyRef||mvj.DatedVehicleJourneyRef||mvj.VehicleJourneyName||String(index),DestinationName:[{value:mvj.DestinationName?.[0]?.value||mvj.DestinationName?.value||mvj.DestinationShortName?.value||''}],EstimatedCalls:{EstimatedCall:[{StopPointRef:{value:stopRef},ExpectedDepartureTime:call.ExpectedDepartureTime,ExpectedArrivalTime:call.ExpectedArrivalTime,AimedDepartureTime:call.AimedDepartureTime,AimedArrivalTime:call.AimedArrivalTime}]}}});const parsed=parisDirectionItems(journeys,originRefs,[],destinationName,'stop-monitoring');if(!destinationTarget){return dedupeParisItems(parsed.originItems)}return dedupeParisItems(parsed.originItems.filter((item)=>{const match=journeys.find((j)=>{const journeyId=j.DatedVehicleJourneyRef?.value||j.DatedVehicleJourneyRef||j.VehicleJourneyRef?.value||j.VehicleJourneyRef||j.FramedVehicleJourneyRef?.DatedVehicleJourneyRef||'';return String(journeyId)===String(trip(item));});const label=(match?.DestinationName?.[0]?.value||match?.DestinationName?.value||match?.DestinationShortName?.value||'').trim();return !label || normalizeText(label)===destinationTarget;}))}
     async function loadParis(){const route=routeById(),[stationA,stationB]=selectedStations(),stationATarget=resolvedParisEndpoint(stationA,stationB),stationBTarget=resolvedParisEndpoint(stationB,stationA),stationARefs=stationA?.stopRefs||[],stationBRefs=stationB?.stopRefs||[],stationATargetRefs=stationATarget?.stopRefs||[],stationBTargetRefs=stationBTarget?.stopRefs||[];if(!route.lineRef||!stationARefs.length||!stationBRefs.length)throw Error('This Paris line or station is not configured for real-time data');const fetchVisits=async(ref)=>{const data=await prim(`/stop-monitoring?${new URLSearchParams({MonitoringRef:ref})}`);return(data.Siri?.ServiceDelivery?.StopMonitoringDelivery||[]).flatMap((delivery)=>delivery.MonitoredStopVisit||[])};const batchMap=async(items,fn,batchSize=2)=>{const results=[];for(let index=0;index<items.length;index+=batchSize){const chunk=items.slice(index,index+batchSize);const chunkResults=await Promise.all(chunk.map(fn));results.push(...chunkResults)}return results};const[aVisitsByRef,bVisitsByRef]=await Promise.all([batchMap(stationARefs,fetchVisits,2),batchMap(stationBRefs,fetchVisits,2)]);let inboundOrigin=parisMonitoringItems(aVisitsByRef.flat(),stationATargetRefs,stationBTarget?.name||''),outboundOrigin=parisMonitoringItems(bVisitsByRef.flat(),stationBTargetRefs,stationATarget?.name||'');const futureLiveItems=[...inboundOrigin,...outboundOrigin].filter((item)=>time(item)&&new Date(time(item)).getTime()>Date.now());if(futureLiveItems.length===0){const response=await prim(`/estimated-timetable?${new URLSearchParams({LineRef:route.lineRef})}`),delivery=response.Siri?.ServiceDelivery?.EstimatedTimetableDelivery?.[0],journeys=(delivery?.EstimatedJourneyVersionFrame||[]).flatMap((frame)=>frame.EstimatedVehicleJourney||[]),aToB=parisDirectionItems(journeys,stationARefs,stationATargetRefs,stationBTarget?.name||''),bToA=parisDirectionItems(journeys,stationBRefs,stationBTargetRefs,stationATarget?.name||'');inboundOrigin=dedupeParisItems(inboundOrigin.concat(aToB.originItems));outboundOrigin=dedupeParisItems(outboundOrigin.concat(bToA.originItems));}const liveParisItems=[...inboundOrigin,...outboundOrigin].filter((item)=>time(item)&&new Date(time(item)).getTime()>Date.now());parisUsedEstimatedFallback=liveParisItems.length===0;const predictionFor=(item)=>({id:item.id,attributes:{departure_time:time(item)},relationships:{trip:{data:{id:trip(item)||item.id}}}});const inboundPredictions=inboundOrigin.map(predictionFor),outboundPredictions=outboundOrigin.map(predictionFor);render(el.inbound,inboundOrigin,inboundPredictions,[],[],[]);render(el.outbound,outboundOrigin,outboundPredictions,[],[],[])}
     function alertFor(alerts,schedule){const id=trip(schedule);return alerts.find((a)=>{const x=a.attributes||{},text=`${x.header||''} ${x.description||''}`.toLowerCase();return /delay|late|hold|service disruption|suspend/.test(text)&&(!a.relationships?.trip?.data?.id||a.relationships.trip.data.id===id)})}
-    function train(record,predictions,alerts,destinationSchedules,destinationPredictions,mapKey){const scheduled=time(record),prediction=predictions.find((p)=>trip(p)===trip(record)),live=prediction?.attributes?.departure_time||prediction?.attributes?.arrival_time,actual=live||scheduled,minutesUntil=Math.max(1,Math.floor((new Date(actual)-Date.now())/60000)),delay=live?(new Date(live)-new Date(scheduled))/1000:0,delayed=Math.abs(delay)>=60,arrivalSchedule=destinationSchedules.find((r)=>trip(r)===trip(record)),arrivalPrediction=destinationPredictions.find((p)=>trip(p)===trip(record)),liveArrival=arrivalPrediction?.attributes?.arrival_time||arrivalPrediction?.attributes?.departure_time,arrival=liveArrival||(delayed?null:arrivalSchedule?.attributes?.arrival_time||arrivalSchedule?.attributes?.departure_time),platform=String(prediction?.attributes?.platform_name||'').trim(),alert=alertFor(alerts,record),isParisEstimatedFallback=isParisTransit(currentTransit)&&parisUsedEstimatedFallback&&String(record?.id||'').startsWith('estimated-timetable-');let note=isParisEstimatedFallback?'Scheduled':'On time',klass=isParisEstimatedFallback?'watch':'';if(delayed){note=`${delay<0?'Early':'Delayed'} ${Math.max(1,Math.round(Math.abs(delay)/60))} min`;klass=delay>0?'delayed':'watch'}else if(alert){note='Line alert reported';klass='watch'}const label=`Scheduled ${displayTime(scheduled)}${arrival?` · ${delayed?'Now arrives':'Arrives'} ${displayTime(arrival)}`:''}${platform?` · Platform ${escapeHtml(platform)}`:''}`;const mapButton=mapKey?`<button type="button" class="departure-map-button" data-map-key="${escapeHtml(mapKey)}" aria-label="Show current vehicle location" title="Show current vehicle location"><span class="map-glyph" aria-hidden="true"><i></i></span></button>`:'';return `<article class="train-row"><div><p class="train-time">${displayTime(actual).replace(' AM','<small>AM</small>').replace(' PM','<small>PM</small>')}<small class="countdown">in ${minutesUntil} mins</small></p><p class="train-meta">${label}</p>${mapButton}</div><span class="delay-note ${klass}">${note}</span></article>`}
+    function occupancyIcon(prediction){const status=String(prediction?.attributes?.occupancy_status||'').toUpperCase();let count=0,level='';if(status==='MANY_SEATS_AVAILABLE'){count=1;level='green'}else if(status==='FEW_SEATS_AVAILABLE'){count=2;level='yellow'}else if(status&&status!=='NO_DATA_AVAILABLE'){count=3;level='red'}if(!count)return '';const people=Array.from({length:count},(_,index)=>`<circle cx="${6+index*5}" cy="5" r="2.1"></circle><path d="M${3+index*5} 15c0-3 2-5 3-5s3 2 3 5"></path>`).join('');return `<span class="occupancy-icon ${level}" aria-label="Vehicle occupancy" title="Vehicle occupancy"><svg viewBox="0 0 18 18" aria-hidden="true">${people}</svg></span>`}
+    function train(record,predictions,alerts,destinationSchedules,destinationPredictions,mapKey){const scheduled=time(record),prediction=predictions.find((p)=>trip(p)===trip(record)),live=prediction?.attributes?.departure_time||prediction?.attributes?.arrival_time,actual=live||scheduled,minutesUntil=Math.max(1,Math.floor((new Date(actual)-Date.now())/60000)),delay=live?(new Date(live)-new Date(scheduled))/1000:0,delayed=Math.abs(delay)>=60,arrivalSchedule=destinationSchedules.find((r)=>trip(r)===trip(record)),arrivalPrediction=destinationPredictions.find((p)=>trip(p)===trip(record)),liveArrival=arrivalPrediction?.attributes?.arrival_time||arrivalPrediction?.attributes?.departure_time,arrival=liveArrival||(delayed?null:arrivalSchedule?.attributes?.arrival_time||arrivalSchedule?.attributes?.departure_time),platform=String(prediction?.attributes?.platform_name||'').trim(),alert=alertFor(alerts,record),isParisEstimatedFallback=isParisTransit(currentTransit)&&parisUsedEstimatedFallback&&String(record?.id||'').startsWith('estimated-timetable-');let note=isParisEstimatedFallback?'Scheduled':'On time',klass=isParisEstimatedFallback?'watch':'';if(delayed){note=`${delay<0?'Early':'Delayed'} ${Math.max(1,Math.round(Math.abs(delay)/60))} min`;klass=delay>0?'delayed':'watch'}else if(alert){note='Line alert reported';klass='watch'}const label=`Scheduled ${displayTime(scheduled)}${arrival?` · ${delayed?'Now arrives':'Arrives'} ${displayTime(arrival)}`:''}${platform?` · Platform ${escapeHtml(platform)}`:''}`;const mapButton=mapKey?`<button type="button" class="departure-map-button" data-map-key="${escapeHtml(mapKey)}" aria-label="Show current vehicle location" title="Show current vehicle location"><span class="map-glyph" aria-hidden="true"><i></i></span></button>`:'';return `<article class="train-row"><div><p class="train-time">${occupancyIcon(prediction)}${displayTime(actual).replace(' AM','<small>AM</small>').replace(' PM','<small>PM</small>')}<small class="countdown">in ${minutesUntil} mins</small></p><p class="train-meta">${label}</p>${mapButton}</div><span class="delay-note ${klass}">${note}</span></article>`}
     function departureFor(record,predictions){const prediction=predictions.find((p)=>trip(p)===trip(record)),predicted=prediction?.attributes?.departure_time||prediction?.attributes?.arrival_time;return predicted||time(record)}
     function render(target,items,predictions,alerts,destinationSchedules,destinationPredictions,context={}){const now=Date.now(),upcoming=items.filter((r)=>time(r)&&new Date(departureFor(r,predictions)).getTime()>now).sort((a,b)=>new Date(departureFor(a,predictions))-new Date(departureFor(b,predictions))).slice(0,2);target.innerHTML=upcoming.length?upcoming.map((r)=>{const matchedPrediction=predictions.find((p)=>trip(p)===trip(r)),vehicleId=matchedPrediction?.relationships?.vehicle?.data?.id||matchedPrediction?.attributes?.vehicle_id||'',expectedAt=departureFor(r,predictions),mapKey=vehicleId?`${context.side||'panel'}:${context.transit||currentTransit}:${trip(r)||r.id}:${time(r)||''}`:'';if(mapKey)departureMapRegistry.set(mapKey,{trip:trip(r)||'',vehicle:vehicleId,route:selectedRouteId||'',monitoringRef:context.transit||currentTransit,transit:context.transit||currentTransit,station:context.expectedStation||'the next stop',expectedAt});return train(r,predictions,alerts,destinationSchedules,destinationPredictions,mapKey)}).join(''):'<div class="empty-state">No more departures found</div>'}
     async function loadBoston(){
       const [stationA,stationB]=selectedStations();
       if(!stationA||!stationB)throw Error('Station selection is incomplete');
+      const predictionQuery=(stop)=>({'filter[route]':selectedRouteId,'filter[stop]':stop,include:'trip,vehicle'});
       const [aSchedules,bSchedules,aPredictions,bPredictions,alerts]=await Promise.all([
         mbta('/schedules',{'filter[route]':selectedRouteId,'filter[stop]':stationA.id,...windowParams(),include:'trip'}),
         mbta('/schedules',{'filter[route]':selectedRouteId,'filter[stop]':stationB.id,...windowParams(),include:'trip'}),
-        mbta('/predictions',{'filter[route]':selectedRouteId,'filter[stop]':stationA.id,include:'trip'}),
-        mbta('/predictions',{'filter[route]':selectedRouteId,'filter[stop]':stationB.id,include:'trip'}),
+        mbta('/predictions',predictionQuery(stationA.id)),
+        mbta('/predictions',predictionQuery(stationB.id)),
         mbta('/alerts',{'filter[route]':selectedRouteId})
       ]);
 
       const aScheduleRecords=records(aSchedules);
       const bScheduleRecords=records(bSchedules);
-      const aPredRecords=records(aPredictions);
-      const bPredRecords=records(bPredictions);
+      const enrichPredictions=(payload)=>{const vehicles=new Map((payload?.included||[]).filter((item)=>item?.type==='vehicle').map((item)=>[item.id,item.attributes||{}]));return records(payload).map((record)=>{const vehicleId=record.relationships?.vehicle?.data?.id,occupancy=vehicles.get(vehicleId)?.occupancy_status;return occupancy?{...record,attributes:{...record.attributes,occupancy_status:occupancy}}:record})};
+      const aPredRecords=enrichPredictions(aPredictions);
+      const bPredRecords=enrichPredictions(bPredictions);
       const alertRecords=records(alerts);
       const mode=canonicalTransit(currentTransit);
 
@@ -1441,6 +1481,7 @@
     if (el.aboutClose) el.aboutClose.addEventListener('click', closeAboutDialog);
     if (el.mapClose) el.mapClose.addEventListener('click', closeMapDialog);
     if (el.mapRefresh) el.mapRefresh.addEventListener('click', refreshDepartureMap);
+    if (el.mapAutoRefresh) el.mapAutoRefresh.addEventListener('change', () => { writeMapAutoRefresh(el.mapAutoRefresh.checked); syncMapAutoRefresh(); });
     if (el.mapDialog) el.mapDialog.addEventListener('click', (event) => { if (event.target === el.mapDialog) closeMapDialog(); });
     const handleDepartureMapClick=(event)=>{const button=event.target.closest?.('.departure-map-button');if(!button)return;const mapKey=button.getAttribute('data-map-key')||'';if(!mapKey)return;openDepartureMap(mapKey)};
     if (el.inbound) el.inbound.addEventListener('click', handleDepartureMapClick);

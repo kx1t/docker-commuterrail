@@ -143,3 +143,24 @@ def test_extract_mbta_route_from_trip_payload_reads_relationship_route_id():
     route = server.extract_mbta_route_from_trip_payload(payload)
 
     assert route == 'CR-Haverhill'
+
+
+def test_schedule_cache_key_buckets_rolling_time_window():
+    first = server.read_cache_key(
+        'boston-bus',
+        '/schedules',
+        {'min_time': '2026-09-15T12:01:00+00:00', 'max_time': '2026-09-16T06:01:00+00:00', 'filter[stop]': '2332'},
+    )
+    second = server.read_cache_key(
+        'boston-bus',
+        '/schedules',
+        {'min_time': '2026-09-15T12:29:00+00:00', 'max_time': '2026-09-16T06:29:00+00:00', 'filter[stop]': '2332'},
+    )
+
+    assert first == second
+
+
+def test_cache_ttl_uses_base_authority_endpoint_defaults():
+    assert server.cache_ttl_seconds('boston-bus', '/schedules') == server.SCHEDULE_CACHE_TTL_SECONDS
+    assert server.cache_ttl_seconds('boston-subway', '/predictions') == server.PREDICTION_CACHE_TTL_SECONDS
+    assert server.cache_ttl_seconds('boston-commuterrail', '/vehicles') == server.VEHICLE_CACHE_TTL_SECONDS

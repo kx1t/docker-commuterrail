@@ -46,7 +46,15 @@ except ModuleNotFoundError:
 PRIM_API = 'https://prim.iledefrance-mobilites.fr/marketplace'
 MBTA_API = 'https://api-v3.mbta.com'
 IDFM_DATA_API = 'https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/arrets-lignes/records'
-CACHE_TTL_SECONDS = int(os.getenv('CACHE_TTL_SECONDS', '60'))
+DEFAULT_CACHE_TTL_SECONDS = int(os.getenv('CACHE_TTL_SECONDS', '60'))
+SCHEDULE_CACHE_TTL_SECONDS = int(os.getenv('Cache-Time-Boston-Schedule', '1800'))
+PREDICTION_CACHE_TTL_SECONDS = int(os.getenv('Cache-Time-Boston-Prediction', '60'))
+VEHICLE_CACHE_TTL_SECONDS = int(os.getenv('Cache-Time-Boston-Vehicle', '60'))
+ALERT_CACHE_TTL_SECONDS = int(os.getenv('Cache-Time-Boston-Alert', '120'))
+STOP_CACHE_TTL_SECONDS = int(os.getenv('Cache-Time-Boston-Stop', '43200'))
+ROUTE_CACHE_TTL_SECONDS = int(os.getenv('Cache-Time-Boston-Route', '43200'))
+TRIP_CACHE_TTL_SECONDS = int(os.getenv('Cache-Time-Boston-Trip', '43200'))
+PARIS_CACHE_TTL_SECONDS = int(os.getenv('Cache-Time-Paris-Default', '60'))
 PORT = int(os.getenv('PORT', '80'))
 PRIM_API_KEY = os.getenv('PRIM_API_KEY', '')
 MBTA_API_KEY = os.getenv('MBTA_API_KEY', '') or os.getenv('BOSTON_API_KEY', '') or os.getenv('API_KEY', '')
@@ -404,8 +412,43 @@ def make_headers(transit: str) -> dict:
     return {}
 
 
+def cache_endpoint_name(endpoint: str) -> str:
+    path = (endpoint or '').split('?', 1)[0].strip('/').lower()
+    return path.rsplit('/', 1)[-1] or 'default'
+
+
+def cache_ttl_seconds(transit: str, endpoint: str) -> int:
+    if canonical_transit_name(transit) == 'paris':
+        return max(1, PARIS_CACHE_TTL_SECONDS)
+    ttl_by_endpoint = {
+        'schedules': SCHEDULE_CACHE_TTL_SECONDS,
+        'predictions': PREDICTION_CACHE_TTL_SECONDS,
+        'vehicles': VEHICLE_CACHE_TTL_SECONDS,
+        'alerts': ALERT_CACHE_TTL_SECONDS,
+        'stops': STOP_CACHE_TTL_SECONDS,
+        'routes': ROUTE_CACHE_TTL_SECONDS,
+        'trips': TRIP_CACHE_TTL_SECONDS,
+    }
+    return max(1, int(ttl_by_endpoint.get(cache_endpoint_name(endpoint), DEFAULT_CACHE_TTL_SECONDS)))
+
+
+def cache_key_query(endpoint: str, query: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    normalized = dict(query or {})
+    if cache_endpoint_name(endpoint) == 'schedules':
+        for field in ('min_time', 'max_time'):
+            value = normalized.get(field)
+            if value:
+                try:
+                    parsed = datetime.datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+                    bucket = int(parsed.timestamp() // 1800) * 1800
+                    normalized[field] = datetime.datetime.fromtimestamp(bucket, tz=datetime.timezone.utc).isoformat()
+                except (TypeError, ValueError, OverflowError):
+                    pass
+    return normalized
+
+
 def read_cache_key(transit: str, endpoint: str, query: Optional[Dict[str, Any]] = None) -> str:
-    return f"{normalize_key(transit)}::{normalize_key(endpoint)}::{json.dumps(query or {}, sort_keys=True)}"
+    return f"{normalize_key(transit)}::{normalize_key(endpoint)}::{json.dumps(cache_key_query(endpoint, query), sort_keys=True)}"
 
 
 def mark_transit_requested(transit: str):
@@ -418,7 +461,7 @@ def transit_requested_recently(transit: str) -> bool:
         last_time = transit_last_requested.get(normalize_key(transit))
         if last_time is None:
             return False
-        return (current_timestamp() - last_time) <= CACHE_TTL_SECONDS
+        return (current_timestamp() - last_time) <= DEFAULT_CACHE_TTL_SECONDS
 
 
 def normalize_api_endpoint(value: Optional[str]) -> str:
@@ -533,8 +576,9 @@ def fetch_and_cache(transit: str, endpoint: str, query: Optional[Dict[str, Any]]
     with cache_lock:
         cache_store[key] = {
             'data': data,
-            'expires_at': fetched_at + CACHE_TTL_SECONDS,
+            'expires_at': fetched_at + cache_ttl_seconds(transit, endpoint),
             'fetched_at': fetched_at,
+            'last_requested_at': fetched_at,
         }
     record_stats_event('refresh', transit, endpoint, query, client_ip=client_ip, user_agent=user_agent)
     return cache_store[key]
@@ -544,10 +588,12 @@ def get_or_refresh_cached_payload(transit: str, endpoint: str, query: Optional[D
     cached = get_cached_payload(transit, endpoint, query)
     should_refresh = cached is None or cached.get('expires_at', 0) <= current_timestamp()
     if cached is not None:
+        with cache_lock:
+            cached['last_requested_at'] = current_timestamp()
         record_stats_event('hit', transit, endpoint, query, client_ip=client_ip, user_agent=user_agent)
     else:
         record_stats_event('miss', transit, endpoint, query, client_ip=client_ip, user_agent=user_agent)
-    if should_refresh and transit_requested_recently(transit):
+    if should_refresh:
         refresh_key = read_cache_key(transit, endpoint, query)
         refresh_slot = begin_refresh(transit, endpoint, query)
         if refresh_slot is not None:
