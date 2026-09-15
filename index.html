@@ -478,41 +478,42 @@
     }
     .settings-field {
       display: grid;
-    .map-auto-refresh {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      margin-top: 8px;
-      color: var(--ink);
-      font-family: var(--mono);
-      font-size: 11px;
-    }
-    .map-auto-refresh input {
-      width: 16px;
-      height: 16px;
-      accent-color: var(--green);
-    }
       gap: 7px;
     }
     .settings-field label {
-    .occupancy-icon {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 18px;
-      height: 18px;
-      margin-right: 6px;
-      vertical-align: -4px;
-      color: var(--green);
-    }
-    .occupancy-icon.yellow { color: #bd8700; }
-    .occupancy-icon.red { color: var(--red); }
-    .occupancy-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
       font-family: var(--mono);
       font-size: 10px;
       letter-spacing: 0.08em;
       text-transform: uppercase;
     }
+      .map-auto-refresh {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 8px;
+        color: var(--ink);
+        font-family: var(--mono);
+        font-size: 11px;
+      }
+      .map-auto-refresh input {
+        width: 16px;
+        height: 16px;
+        accent-color: var(--green);
+      }
+      .occupancy-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        margin: 0;
+        flex: 0 0 18px;
+        color: var(--green);
+      }
+      .occupancy-icon.yellow { color: #bd8700; }
+      .occupancy-icon.red { color: var(--red); }
+      .occupancy-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+      .train-actions { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; min-height: 40px; }
     .settings-field select {
       width: 100%;
       padding: 12px;
@@ -1133,6 +1134,7 @@
     let loadInFlight=false;
 
     let settingsTransit=currentTransit;
+    let settingsSyncVersion=0;
     let settingsRoutes=[];
     let settingsStops=[];
     let settingsRouteId='';
@@ -1186,7 +1188,7 @@
     function populateSettingsLineOptions(){el.lineSelect.innerHTML=settingsRoutes.map((route)=>`<option value="${route.id}">${routeLabel(route,settingsTransit)}</option>`).join('');el.lineSelect.value=settingsRouteId}
     function populateSettingsStopOptions(){el.endpointSelect.innerHTML=settingsStops.map((station)=>`<option value="${station.id}">${stopName(station,settingsTransit)}</option>`).join('');el.remoteSelect.innerHTML=settingsStops.map((station)=>`<option value="${station.id}">${stopName(station,settingsTransit)}</option>`).join('');el.endpointSelect.value=settingsEndpointId;el.remoteSelect.value=settingsRemoteId}
     async function loadRoutesForTransit(transit){const profile=profileForTransit(transit);if(isParisTransit(transit))return PARIS_LINES;const data=records(await mbta('/routes',{'filter[type]':profile.routeType},transit));if(!data.length)throw Error('No routes found for selected authority');return data}
-    async function syncSettingsTransit(nextTransit,preferDefaults=false){settingsTransit=canonicalTransit(nextTransit);const profile=profileForTransit(settingsTransit);const saved=readSavedSettings(settingsTransit);settingsRoutes=await loadRoutesForTransit(settingsTransit);settingsRouteId=saved.routeId||profile.defaultRouteId||settingsRoutes[0]?.id||'';if(!settingsRoutes.some((route)=>route.id===settingsRouteId)){settingsRouteId=settingsRoutes[0]?.id||''}populateSettingsLineOptions();settingsStops=await loadStopsForRoute(settingsTransit,settingsRouteId);if(!settingsStops.length)throw Error('No stations found for selected route');const ordered=orderedStations(settingsStops,settingsTransit);const first=ordered[0]?.id||settingsStops[0]?.id||'';const second=ordered.at(-1)?.id||settingsStops.find((station)=>station.id!==first)?.id||first;settingsEndpointId=preferDefaults?first:(saved.endpointId||first);settingsRemoteId=preferDefaults?second:(saved.remoteId||second);if(!settingsStops.some((station)=>station.id===settingsEndpointId)){settingsEndpointId=first}if(!settingsStops.some((station)=>station.id===settingsRemoteId)||settingsRemoteId===settingsEndpointId){settingsRemoteId=second}populateSettingsStopOptions()}
+    async function syncSettingsTransit(nextTransit,preferDefaults=false){const version=++settingsSyncVersion;const next=canonicalTransit(nextTransit);settingsTransit=next;const profile=profileForTransit(next);const saved=readSavedSettings(next);const nextRoutes=await loadRoutesForTransit(next);if(version!==settingsSyncVersion)return;settingsRoutes=nextRoutes;settingsRouteId=saved.routeId||profile.defaultRouteId||settingsRoutes[0]?.id||'';if(!settingsRoutes.some((route)=>route.id===settingsRouteId)){settingsRouteId=settingsRoutes[0]?.id||''}populateSettingsLineOptions();const nextStops=await loadStopsForRoute(next,settingsRouteId);if(version!==settingsSyncVersion)return;if(!nextStops.length)throw Error('No stations found for selected route');settingsStops=nextStops;const ordered=orderedStations(settingsStops,next);const first=ordered[0]?.id||settingsStops[0]?.id||'';const second=ordered.at(-1)?.id||settingsStops.find((station)=>station.id!==first)?.id||first;settingsEndpointId=preferDefaults?first:(saved.endpointId||first);settingsRemoteId=preferDefaults?second:(saved.remoteId||second);if(!settingsStops.some((station)=>station.id===settingsEndpointId)){settingsEndpointId=first}if(!settingsStops.some((station)=>station.id===settingsRemoteId)||settingsRemoteId===settingsEndpointId){settingsRemoteId=second}populateSettingsStopOptions()}
     async function openSettingsDialog(){populateSettingsAuthorityOptions();await syncSettingsTransit(currentTransit,false);if(typeof el.dialog.showModal==='function')el.dialog.showModal();else el.dialog.setAttribute('open','open')}
     function closeSettingsDialog(){if(typeof el.dialog.close==='function')el.dialog.close();else el.dialog.removeAttribute('open')}
     async function loadLeaflet(){if(window.L&&window.L.map)return window.L;if(!mapLibraryPromise){mapLibraryPromise=new Promise((resolve,reject)=>{const cssId='leaflet-css';if(!document.getElementById(cssId)){const link=document.createElement('link');link.id=cssId;link.rel='stylesheet';link.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';link.integrity='sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=';link.crossOrigin='';document.head.appendChild(link)}const script=document.createElement('script');script.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';script.integrity='sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=';script.crossOrigin='';script.onload=()=>resolve(window.L);script.onerror=()=>reject(Error('Could not load map library'));document.head.appendChild(script)})}return mapLibraryPromise}
@@ -1209,7 +1211,7 @@
     async function loadParis(){const route=routeById(),[stationA,stationB]=selectedStations(),stationATarget=resolvedParisEndpoint(stationA,stationB),stationBTarget=resolvedParisEndpoint(stationB,stationA),stationARefs=stationA?.stopRefs||[],stationBRefs=stationB?.stopRefs||[],stationATargetRefs=stationATarget?.stopRefs||[],stationBTargetRefs=stationBTarget?.stopRefs||[];if(!route.lineRef||!stationARefs.length||!stationBRefs.length)throw Error('This Paris line or station is not configured for real-time data');const fetchVisits=async(ref)=>{const data=await prim(`/stop-monitoring?${new URLSearchParams({MonitoringRef:ref})}`);return(data.Siri?.ServiceDelivery?.StopMonitoringDelivery||[]).flatMap((delivery)=>delivery.MonitoredStopVisit||[])};const batchMap=async(items,fn,batchSize=2)=>{const results=[];for(let index=0;index<items.length;index+=batchSize){const chunk=items.slice(index,index+batchSize);const chunkResults=await Promise.all(chunk.map(fn));results.push(...chunkResults)}return results};const[aVisitsByRef,bVisitsByRef]=await Promise.all([batchMap(stationARefs,fetchVisits,2),batchMap(stationBRefs,fetchVisits,2)]);let inboundOrigin=parisMonitoringItems(aVisitsByRef.flat(),stationATargetRefs,stationBTarget?.name||''),outboundOrigin=parisMonitoringItems(bVisitsByRef.flat(),stationBTargetRefs,stationATarget?.name||'');const futureLiveItems=[...inboundOrigin,...outboundOrigin].filter((item)=>time(item)&&new Date(time(item)).getTime()>Date.now());if(futureLiveItems.length===0){const response=await prim(`/estimated-timetable?${new URLSearchParams({LineRef:route.lineRef})}`),delivery=response.Siri?.ServiceDelivery?.EstimatedTimetableDelivery?.[0],journeys=(delivery?.EstimatedJourneyVersionFrame||[]).flatMap((frame)=>frame.EstimatedVehicleJourney||[]),aToB=parisDirectionItems(journeys,stationARefs,stationATargetRefs,stationBTarget?.name||''),bToA=parisDirectionItems(journeys,stationBRefs,stationBTargetRefs,stationATarget?.name||'');inboundOrigin=dedupeParisItems(inboundOrigin.concat(aToB.originItems));outboundOrigin=dedupeParisItems(outboundOrigin.concat(bToA.originItems));}const liveParisItems=[...inboundOrigin,...outboundOrigin].filter((item)=>time(item)&&new Date(time(item)).getTime()>Date.now());parisUsedEstimatedFallback=liveParisItems.length===0;const predictionFor=(item)=>({id:item.id,attributes:{departure_time:time(item)},relationships:{trip:{data:{id:trip(item)||item.id}}}});const inboundPredictions=inboundOrigin.map(predictionFor),outboundPredictions=outboundOrigin.map(predictionFor);render(el.inbound,inboundOrigin,inboundPredictions,[],[],[]);render(el.outbound,outboundOrigin,outboundPredictions,[],[],[])}
     function alertFor(alerts,schedule){const id=trip(schedule);return alerts.find((a)=>{const x=a.attributes||{},text=`${x.header||''} ${x.description||''}`.toLowerCase();return /delay|late|hold|service disruption|suspend/.test(text)&&(!a.relationships?.trip?.data?.id||a.relationships.trip.data.id===id)})}
     function occupancyIcon(prediction){const status=String(prediction?.attributes?.occupancy_status||'').toUpperCase();let count=0,level='';if(status==='MANY_SEATS_AVAILABLE'){count=1;level='green'}else if(status==='FEW_SEATS_AVAILABLE'){count=2;level='yellow'}else if(status&&status!=='NO_DATA_AVAILABLE'){count=3;level='red'}if(!count)return '';const people=Array.from({length:count},(_,index)=>`<circle cx="${6+index*5}" cy="5" r="2.1"></circle><path d="M${3+index*5} 15c0-3 2-5 3-5s3 2 3 5"></path>`).join('');return `<span class="occupancy-icon ${level}" aria-label="Vehicle occupancy" title="Vehicle occupancy"><svg viewBox="0 0 18 18" aria-hidden="true">${people}</svg></span>`}
-    function train(record,predictions,alerts,destinationSchedules,destinationPredictions,mapKey){const scheduled=time(record),prediction=predictions.find((p)=>trip(p)===trip(record)),live=prediction?.attributes?.departure_time||prediction?.attributes?.arrival_time,actual=live||scheduled,minutesUntil=Math.max(1,Math.floor((new Date(actual)-Date.now())/60000)),delay=live?(new Date(live)-new Date(scheduled))/1000:0,delayed=Math.abs(delay)>=60,arrivalSchedule=destinationSchedules.find((r)=>trip(r)===trip(record)),arrivalPrediction=destinationPredictions.find((p)=>trip(p)===trip(record)),liveArrival=arrivalPrediction?.attributes?.arrival_time||arrivalPrediction?.attributes?.departure_time,arrival=liveArrival||(delayed?null:arrivalSchedule?.attributes?.arrival_time||arrivalSchedule?.attributes?.departure_time),platform=String(prediction?.attributes?.platform_name||'').trim(),alert=alertFor(alerts,record),isParisEstimatedFallback=isParisTransit(currentTransit)&&parisUsedEstimatedFallback&&String(record?.id||'').startsWith('estimated-timetable-');let note=isParisEstimatedFallback?'Scheduled':'On time',klass=isParisEstimatedFallback?'watch':'';if(delayed){note=`${delay<0?'Early':'Delayed'} ${Math.max(1,Math.round(Math.abs(delay)/60))} min`;klass=delay>0?'delayed':'watch'}else if(alert){note='Line alert reported';klass='watch'}const label=`Scheduled ${displayTime(scheduled)}${arrival?` · ${delayed?'Now arrives':'Arrives'} ${displayTime(arrival)}`:''}${platform?` · Platform ${escapeHtml(platform)}`:''}`;const mapButton=mapKey?`<button type="button" class="departure-map-button" data-map-key="${escapeHtml(mapKey)}" aria-label="Show current vehicle location" title="Show current vehicle location"><span class="map-glyph" aria-hidden="true"><i></i></span></button>`:'';return `<article class="train-row"><div><p class="train-time">${occupancyIcon(prediction)}${displayTime(actual).replace(' AM','<small>AM</small>').replace(' PM','<small>PM</small>')}<small class="countdown">in ${minutesUntil} mins</small></p><p class="train-meta">${label}</p>${mapButton}</div><span class="delay-note ${klass}">${note}</span></article>`}
+    function train(record,predictions,alerts,destinationSchedules,destinationPredictions,mapKey){const scheduled=time(record),prediction=predictions.find((p)=>trip(p)===trip(record)),live=prediction?.attributes?.departure_time||prediction?.attributes?.arrival_time,actual=live||scheduled,minutesUntil=Math.max(1,Math.floor((new Date(actual)-Date.now())/60000)),delay=live?(new Date(live)-new Date(scheduled))/1000:0,delayed=Math.abs(delay)>=60,arrivalSchedule=destinationSchedules.find((r)=>trip(r)===trip(record)),arrivalPrediction=destinationPredictions.find((p)=>trip(p)===trip(record)),liveArrival=arrivalPrediction?.attributes?.arrival_time||arrivalPrediction?.attributes?.departure_time,arrival=liveArrival||(delayed?null:arrivalSchedule?.attributes?.arrival_time||arrivalSchedule?.attributes?.departure_time),platform=String(prediction?.attributes?.platform_name||'').trim(),alert=alertFor(alerts,record),isParisEstimatedFallback=isParisTransit(currentTransit)&&parisUsedEstimatedFallback&&String(record?.id||'').startsWith('estimated-timetable-');let note=isParisEstimatedFallback?'Scheduled':'On time',klass=isParisEstimatedFallback?'watch':'';if(delayed){note=`${delay<0?'Early':'Delayed'} ${Math.max(1,Math.round(Math.abs(delay)/60))} min`;klass=delay>0?'delayed':'watch'}else if(alert){note='Line alert reported';klass='watch'}const label=`Scheduled ${displayTime(scheduled)}${arrival?` · ${delayed?'Now arrives':'Arrives'} ${displayTime(arrival)}`:''}${platform?` · Platform ${escapeHtml(platform)}`:''}`;const mapButton=mapKey?`<button type="button" class="departure-map-button" data-map-key="${escapeHtml(mapKey)}" aria-label="Show current vehicle location" title="Show current vehicle location"><span class="map-glyph" aria-hidden="true"><i></i></span></button>`:'';return `<article class="train-row"><div><p class="train-time">${displayTime(actual).replace(' AM','<small>AM</small>').replace(' PM','<small>PM</small>')}<small class="countdown">in ${minutesUntil} mins</small></p><p class="train-meta">${label}</p><span class="train-actions">${occupancyIcon(prediction)}${mapButton}</span></div><span class="delay-note ${klass}">${note}</span></article>`}
     function departureFor(record,predictions){const prediction=predictions.find((p)=>trip(p)===trip(record)),predicted=prediction?.attributes?.departure_time||prediction?.attributes?.arrival_time;return predicted||time(record)}
     function render(target,items,predictions,alerts,destinationSchedules,destinationPredictions,context={}){const now=Date.now(),upcoming=items.filter((r)=>time(r)&&new Date(departureFor(r,predictions)).getTime()>now).sort((a,b)=>new Date(departureFor(a,predictions))-new Date(departureFor(b,predictions))).slice(0,2);target.innerHTML=upcoming.length?upcoming.map((r)=>{const matchedPrediction=predictions.find((p)=>trip(p)===trip(r)),vehicleId=matchedPrediction?.relationships?.vehicle?.data?.id||matchedPrediction?.attributes?.vehicle_id||'',expectedAt=departureFor(r,predictions),mapKey=vehicleId?`${context.side||'panel'}:${context.transit||currentTransit}:${trip(r)||r.id}:${time(r)||''}`:'';if(mapKey)departureMapRegistry.set(mapKey,{trip:trip(r)||'',vehicle:vehicleId,route:selectedRouteId||'',monitoringRef:context.transit||currentTransit,transit:context.transit||currentTransit,station:context.expectedStation||'the next stop',expectedAt});return train(r,predictions,alerts,destinationSchedules,destinationPredictions,mapKey)}).join(''):'<div class="empty-state">No more departures found</div>'}
     async function loadBoston(){
@@ -1269,9 +1271,17 @@
       const outboundPredictions=hasDirections&&outboundDir!==undefined?byDirection(bPredRecords,outboundDir):bPredRecords;
       const inboundDestPredictions=hasDirections&&inboundDir!==undefined?byDirection(bPredRecords,inboundDir):bPredRecords;
       const outboundDestPredictions=hasDirections&&outboundDir!==undefined?byDirection(aPredRecords,outboundDir):aPredRecords;
+      const safeInboundSchedules=inboundSchedules.length?inboundSchedules:aScheduleRecords;
+      const safeOutboundSchedules=outboundSchedules.length?outboundSchedules:bScheduleRecords;
+      const safeInboundDestinations=inboundDestinations.length?inboundDestinations:bScheduleRecords;
+      const safeOutboundDestinations=outboundDestinations.length?outboundDestinations:aScheduleRecords;
+      const safeInboundPredictions=inboundPredictions.length?inboundPredictions:aPredRecords;
+      const safeOutboundPredictions=outboundPredictions.length?outboundPredictions:bPredRecords;
+      const safeInboundDestPredictions=inboundDestPredictions.length?inboundDestPredictions:bPredRecords;
+      const safeOutboundDestPredictions=outboundDestPredictions.length?outboundDestPredictions:aPredRecords;
 
-      render(el.inbound,inboundSchedules,inboundPredictions,alertRecords,inboundDestinations,inboundDestPredictions,{side:'inbound',transit:currentTransit,sideLabel:'Inbound',expectedStation:stopName(stationA,currentTransit)});
-      render(el.outbound,outboundSchedules,outboundPredictions,alertRecords,outboundDestinations,outboundDestPredictions,{side:'outbound',transit:currentTransit,sideLabel:'Outbound',expectedStation:stopName(stationB,currentTransit)});
+      render(el.inbound,safeInboundSchedules,safeInboundPredictions,alertRecords,safeInboundDestinations,safeInboundDestPredictions,{side:'inbound',transit:currentTransit,sideLabel:'Inbound',expectedStation:stopName(stationA,currentTransit)});
+      render(el.outbound,safeOutboundSchedules,safeOutboundPredictions,alertRecords,safeOutboundDestinations,safeOutboundDestPredictions,{side:'outbound',transit:currentTransit,sideLabel:'Outbound',expectedStation:stopName(stationB,currentTransit)});
     }
     async function load(){if(loadInFlight)return;loadInFlight=true;departureMapRegistry.clear();el.status.textContent='Checking live departures...';el.dot.className='status-dot loading';el.refresh.disabled=true;try{if(isParisTransit(currentTransit)){await loadParis()}else{await loadBoston()}el.status.textContent=isParisTransit(currentTransit)&&parisUsedEstimatedFallback?'Scheduled data only':'Live data connected';el.updated.textContent=`Updated ${new Intl.DateTimeFormat(undefined,{hour:'numeric',minute:'2-digit'}).format(new Date())}`;el.dot.className=isParisTransit(currentTransit)&&parisUsedEstimatedFallback?'status-dot scheduled':'status-dot connected'}catch(error){console.error(error);el.inbound.innerHTML=el.outbound.innerHTML='<div class="empty-state">Live data temporarily unavailable</div>';el.status.textContent=`Could not reach ${isParisTransit(currentTransit)?'Île-de-France Mobilités':'MBTA'} live data`;el.dot.className='status-dot error';el.updated.textContent=''}finally{loadInFlight=false;el.refresh.disabled=false}}
     function replaceTransitInUrl(transit){const url=new URL(location.href);url.searchParams.set('transit',canonicalTransit(transit));history.replaceState({},'',url)}
@@ -1497,17 +1507,43 @@
     if (el.statsRefresh) el.statsRefresh.addEventListener('click', () => loadStatsDialog(true));
     if (el.authoritySelect) {
       el.authoritySelect.addEventListener('change', async () => {
-        await syncSettingsTransit(el.authoritySelect.value, false);
+        settingsRoutes=[];
+        settingsStops=[];
+        settingsRouteId='';
+        settingsEndpointId='';
+        settingsRemoteId='';
+        populateSettingsLineOptions();
+        populateSettingsStopOptions();
+        try {
+          await syncSettingsTransit(el.authoritySelect.value, true);
+        } catch (error) {
+          console.error(error);
+          settingsRoutes=[];
+          settingsStops=[];
+          populateSettingsLineOptions();
+          populateSettingsStopOptions();
+        }
       });
     }
     if (el.lineSelect) {
       el.lineSelect.addEventListener('change', async () => {
         settingsRouteId=el.lineSelect.value;
-        settingsStops=await loadStopsForRoute(settingsTransit,settingsRouteId);
-        const ordered=orderedStations(settingsStops,settingsTransit);
-        settingsEndpointId=ordered[0]?.id||settingsStops[0]?.id||'';
-        settingsRemoteId=ordered.at(-1)?.id||settingsStops.find((station)=>station.id!==settingsEndpointId)?.id||settingsEndpointId;
+        settingsStops=[];
+        settingsEndpointId='';
+        settingsRemoteId='';
         populateSettingsStopOptions();
+        const version=++settingsSyncVersion;
+        try {
+          const nextStops=await loadStopsForRoute(settingsTransit,settingsRouteId);
+          if(version!==settingsSyncVersion)return;
+          settingsStops=nextStops;
+          const ordered=orderedStations(settingsStops,settingsTransit);
+          settingsEndpointId=ordered[0]?.id||settingsStops[0]?.id||'';
+          settingsRemoteId=ordered.at(-1)?.id||settingsStops.find((station)=>station.id!==settingsEndpointId)?.id||settingsEndpointId;
+          populateSettingsStopOptions();
+        } catch (error) {
+          console.error(error);
+        }
       });
     }
     if (el.endpointSelect) {
