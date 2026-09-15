@@ -1206,8 +1206,9 @@
       const nextEpoch=(items)=>items.map((item)=>new Date(time(item)).getTime()).filter(Number.isFinite).filter((epoch)=>epoch>Date.now()).sort((a,b)=>a-b)[0]??null;
       const dirSnapshot=[0,1].map((dir)=>({dir,a:byDirection(aScheduleRecords,dir),b:byDirection(bScheduleRecords,dir)})).map((entry)=>({...entry,nextA:nextEpoch(entry.a),nextB:nextEpoch(entry.b)}));
 
-      let inboundDir=(dirSnapshot.find((entry)=>entry.nextA!==null&&entry.nextB!==null&&entry.nextA<entry.nextB)||{}).dir;
-      let outboundDir=(dirSnapshot.find((entry)=>entry.nextA!==null&&entry.nextB!==null&&entry.nextB<entry.nextA)||{}).dir;
+      const originDirections=dirSnapshot.filter((entry)=>entry.a.length).map((entry)=>entry.dir);
+      let inboundDir=originDirections.length===1?originDirections[0]:(dirSnapshot.find((entry)=>entry.nextA!==null&&entry.nextB!==null&&entry.nextA<entry.nextB)||{}).dir;
+      let outboundDir=originDirections.length===1?(originDirections[0]===0?1:0):(dirSnapshot.find((entry)=>entry.nextA!==null&&entry.nextB!==null&&entry.nextB<entry.nextA)||{}).dir;
       if(inboundDir===undefined&&outboundDir!==undefined)inboundDir=outboundDir===0?1:0;
       if(outboundDir===undefined&&inboundDir!==undefined)outboundDir=inboundDir===0?1:0;
       if(inboundDir===undefined)inboundDir=(dirSnapshot.find((entry)=>entry.a.length)||{}).dir;
