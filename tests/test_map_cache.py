@@ -1,0 +1,72 @@
+import time
+
+from app import server
+
+
+def test_get_or_refresh_cached_payload_reuses_shared_cache_refresh_path():
+    server.cache_store.clear()
+    server.refresh_inflight.clear()
+    server.transit_last_requested.clear()
+
+    called = []
+    original_fetch_and_cache = server.fetch_and_cache
+
+    def fake_fetch_and_cache(transit, endpoint, query, client_ip=None, user_agent=None):
+        called.append((transit, endpoint, query, client_ip, user_agent))
+        return {
+            'data': {'data': [{'attributes': {'latitude': '42.1', 'longitude': '-71.2'}}]},
+            'expires_at': server.current_timestamp() + 60,
+            'fetched_at': server.current_timestamp(),
+        }
+
+    server.fetch_and_cache = fake_fetch_and_cache
+    try:
+        server.mark_transit_requested('boston-commuterrail')
+        cached = server.get_or_refresh_cached_payload(
+            'boston-commuterrail',
+            '/vehicles',
+            {'filter[trip]': 'trip-1', 'page[limit]': '10'},
+        )
+    finally:
+        server.fetch_and_cache = original_fetch_and_cache
+
+    assert called == [
+        (
+            'boston-commuterrail',
+            '/vehicles',
+            {'filter[trip]': 'trip-1', 'page[limit]': '10'},
+            None,
+            None,
+        )
+    ]
+    assert cached is not None
+    assert cached['data']['data'][0]['attributes']['latitude'] == '42.1'
+
+
+def test_build_vehicle_snapshot_marks_stale_cached_position_as_warning():
+    cached_vehicle_entry = {
+        'data': {
+            'data': [
+                {
+                    'attributes': {
+                        'latitude': '42.3601',
+                        'longitude': '-71.0589',
+                        'updated_at': '2026-09-14T18:00:00Z',
+                    }
+                }
+            ]
+        },
+        'expires_at': time.time() - 5,
+        'fetched_at': time.time() - 15,
+    }
+
+    payload = server.build_vehicle_snapshot(
+        'boston-commuterrail',
+        {'trip': 'trip-2'},
+        cached_vehicle_entry,
+    )
+
+    assert payload['status'] == 'warning'
+    assert payload['data']['available'] is True
+    assert payload['data']['latitude'] == 42.3601
+    assert 'Data is stale.' in payload['message']

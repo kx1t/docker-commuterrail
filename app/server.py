@@ -540,7 +540,32 @@ def fetch_and_cache(transit: str, endpoint: str, query: Optional[Dict[str, Any]]
     return cache_store[key]
 
 
-def build_vehicle_snapshot(transit: str, query: Optional[Dict[str, Any]] = None):
+def get_or_refresh_cached_payload(transit: str, endpoint: str, query: Optional[Dict[str, Any]] = None, client_ip: Optional[str] = None, user_agent: Optional[str] = None):
+    cached = get_cached_payload(transit, endpoint, query)
+    should_refresh = cached is None or cached.get('expires_at', 0) <= current_timestamp()
+    if cached is not None:
+        record_stats_event('hit', transit, endpoint, query, client_ip=client_ip, user_agent=user_agent)
+    else:
+        record_stats_event('miss', transit, endpoint, query, client_ip=client_ip, user_agent=user_agent)
+    if should_refresh and transit_requested_recently(transit):
+        refresh_key = read_cache_key(transit, endpoint, query)
+        refresh_slot = begin_refresh(transit, endpoint, query)
+        if refresh_slot is not None:
+            try:
+                cached = fetch_and_cache(transit, endpoint, query, client_ip=client_ip, user_agent=user_agent)
+            finally:
+                finalize_refresh(transit, endpoint, query)
+        else:
+            cached = get_cached_payload(transit, endpoint, query)
+            if cached is None:
+                wait_event = refresh_inflight.get(refresh_key)
+                if wait_event is not None:
+                    wait_event.wait(timeout=0.25)
+                cached = get_cached_payload(transit, endpoint, query)
+    return cached
+
+
+def build_vehicle_snapshot(transit: str, query: Optional[Dict[str, Any]] = None, cached_vehicle_entry: Optional[Dict[str, Any]] = None):
     normalized = canonical_transit_name(transit)
     trip = (query or {}).get('trip')
     if not trip:
@@ -557,21 +582,30 @@ def build_vehicle_snapshot(transit: str, query: Optional[Dict[str, Any]] = None)
             'message': 'Paris live vehicle coordinates are not exposed by the current feed.',
         }
 
-    try:
-        payload = fetch_upstream(normalized, '/vehicles', {'filter[trip]': trip, 'page[limit]': '10'})
-    except Exception as exc:
+    if cached_vehicle_entry is None:
         return {
             'status': 'warning',
-            'data': unavailable_snapshot(normalized, trip, f'Live vehicle position could not be retrieved right now. {http_error_text(exc)}'),
-            'message': f'Live vehicle position could not be retrieved right now. {http_error_text(exc)}',
+            'data': unavailable_snapshot(normalized, trip, 'Live vehicle position could not be retrieved right now. No recent refresh window is available.'),
+            'message': 'Live vehicle position could not be retrieved right now. No recent refresh window is available.',
         }
+    payload = cached_vehicle_entry.get('data') or {}
     snapshot = extract_mbta_vehicle_snapshot(payload, normalized, trip)
     if snapshot:
-        return {'status': 'ok', 'data': snapshot}
+        stale = cached_vehicle_entry.get('expires_at', 0) <= current_timestamp()
+        response = {'status': 'ok' if not stale else 'warning', 'data': snapshot}
+        if stale:
+            updated_at = cached_vehicle_entry.get('fetched_at') or cached_vehicle_entry.get('expires_at') or current_timestamp()
+            response['message'] = f'Warning: Live vehicle position was last updated on {format_cache_time(updated_at)}. Data is stale.'
+        return response
+    stale = cached_vehicle_entry.get('expires_at', 0) <= current_timestamp()
     return {
         'status': 'warning',
-        'data': unavailable_snapshot(normalized, trip, 'No live vehicle position is available yet for this departure.'),
-        'message': 'No live vehicle position is available yet for this departure.',
+        'data': unavailable_snapshot(
+            normalized,
+            trip,
+            'No live vehicle position is available yet for this departure.' if not stale else 'No live vehicle position is available in the current stale snapshot.',
+        ),
+        'message': 'No live vehicle position is available yet for this departure.' if not stale else f'Warning: Live vehicle position was last updated on {format_cache_time(cached_vehicle_entry.get("fetched_at") or cached_vehicle_entry.get("expires_at") or current_timestamp())}. Data is stale.',
     }
 
 
@@ -758,7 +792,19 @@ class TransitCacheHandler(BaseHTTPRequestHandler):
                         raw_value = query.get(key, [None])[0]
                         if raw_value and key not in map_query:
                             map_query[key] = raw_value
-                    payload = build_vehicle_snapshot(transit, map_query)
+                    client_ip = get_client_ip_from_headers(self.headers)
+                    if not client_ip and hasattr(self, 'client_address'):
+                        client_ip = self.client_address[0]
+                    user_agent = self.headers.get('User-Agent')
+                    vehicle_query = {'filter[trip]': map_query.get('trip', ''), 'page[limit]': '10'}
+                    cached_vehicle_entry = get_or_refresh_cached_payload(
+                        transit,
+                        '/vehicles',
+                        vehicle_query,
+                        client_ip=client_ip,
+                        user_agent=user_agent,
+                    )
+                    payload = build_vehicle_snapshot(transit, map_query, cached_vehicle_entry)
                     body = {'status': payload.get('status', 'ok'), 'data': payload.get('data', {})}
                     if payload.get('message'):
                         body['message'] = payload['message']
@@ -781,27 +827,7 @@ class TransitCacheHandler(BaseHTTPRequestHandler):
                     if not client_ip and hasattr(self, 'client_address'):
                         client_ip = self.client_address[0]
                     user_agent = self.headers.get('User-Agent')
-                    cached = get_cached_payload(transit, endpoint, request_query)
-                    should_refresh = cached is None or cached.get('expires_at', 0) <= current_timestamp()
-                    if cached is not None:
-                        record_stats_event('hit', transit, endpoint, request_query, client_ip=client_ip, user_agent=user_agent)
-                    else:
-                        record_stats_event('miss', transit, endpoint, request_query, client_ip=client_ip, user_agent=user_agent)
-                    if should_refresh and transit_requested_recently(transit):
-                        refresh_key = read_cache_key(transit, endpoint, request_query)
-                        refresh_slot = begin_refresh(transit, endpoint, request_query)
-                        if refresh_slot is not None:
-                            try:
-                                cached = fetch_and_cache(transit, endpoint, request_query, client_ip=client_ip, user_agent=user_agent)
-                            finally:
-                                finalize_refresh(transit, endpoint, request_query)
-                        else:
-                            cached = get_cached_payload(transit, endpoint, request_query)
-                            if cached is None:
-                                wait_event = refresh_inflight.get(refresh_key)
-                                if wait_event is not None:
-                                    wait_event.wait(timeout=0.25)
-                                cached = get_cached_payload(transit, endpoint, request_query)
+                    cached = get_or_refresh_cached_payload(transit, endpoint, request_query, client_ip=client_ip, user_agent=user_agent)
                     if cached is not None:
                         stale = cached.get('expires_at', 0) <= current_timestamp()
                         body = build_json_response(
