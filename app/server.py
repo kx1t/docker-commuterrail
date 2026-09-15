@@ -565,10 +565,22 @@ def get_or_refresh_cached_payload(transit: str, endpoint: str, query: Optional[D
     return cached
 
 
+def normalize_mbta_vehicle_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    data = payload.get('data')
+    if isinstance(data, list):
+        return payload
+    if isinstance(data, dict):
+        normalized = dict(payload)
+        normalized['data'] = [data]
+        return normalized
+    return {'data': []}
+
+
 def build_vehicle_snapshot(transit: str, query: Optional[Dict[str, Any]] = None, cached_vehicle_entry: Optional[Dict[str, Any]] = None):
     normalized = canonical_transit_name(transit)
-    trip = (query or {}).get('trip')
-    if not trip:
+    trip = str((query or {}).get('trip') or '').strip()
+    vehicle = str((query or {}).get('vehicle') or '').strip()
+    if not trip and not vehicle:
         return {
             'status': 'error',
             'data': unavailable_snapshot(normalized, '', 'Missing trip identifier for snapshot map.'),
@@ -585,11 +597,11 @@ def build_vehicle_snapshot(transit: str, query: Optional[Dict[str, Any]] = None,
     if cached_vehicle_entry is None:
         return {
             'status': 'warning',
-            'data': unavailable_snapshot(normalized, trip, 'Live vehicle position could not be retrieved right now. No recent refresh window is available.'),
+            'data': unavailable_snapshot(normalized, trip or vehicle, 'Live vehicle position could not be retrieved right now. No recent refresh window is available.'),
             'message': 'Live vehicle position could not be retrieved right now. No recent refresh window is available.',
         }
-    payload = cached_vehicle_entry.get('data') or {}
-    snapshot = extract_mbta_vehicle_snapshot(payload, normalized, trip)
+    payload = normalize_mbta_vehicle_payload(cached_vehicle_entry.get('data') or {})
+    snapshot = extract_mbta_vehicle_snapshot(payload, normalized, trip or vehicle)
     if snapshot:
         stale = cached_vehicle_entry.get('expires_at', 0) <= current_timestamp()
         response = {'status': 'ok' if not stale else 'warning', 'data': snapshot}
@@ -602,7 +614,7 @@ def build_vehicle_snapshot(transit: str, query: Optional[Dict[str, Any]] = None,
         'status': 'warning',
         'data': unavailable_snapshot(
             normalized,
-            trip,
+            trip or vehicle,
             'No live vehicle position is available yet for this departure.' if not stale else 'No live vehicle position is available in the current stale snapshot.',
         ),
         'message': 'No live vehicle position is available yet for this departure.' if not stale else f'Warning: Live vehicle position was last updated on {format_cache_time(cached_vehicle_entry.get("fetched_at") or cached_vehicle_entry.get("expires_at") or current_timestamp())}. Data is stale.',
@@ -788,7 +800,7 @@ class TransitCacheHandler(BaseHTTPRequestHandler):
             if request_path in ('/api/map', '/map'):
                 try:
                     map_query = dict(request_query or {})
-                    for key in ('trip', 'route', 'monitoring_ref'):
+                    for key in ('trip', 'route', 'monitoring_ref', 'vehicle'):
                         raw_value = query.get(key, [None])[0]
                         if raw_value and key not in map_query:
                             map_query[key] = raw_value
@@ -796,15 +808,48 @@ class TransitCacheHandler(BaseHTTPRequestHandler):
                     if not client_ip and hasattr(self, 'client_address'):
                         client_ip = self.client_address[0]
                     user_agent = self.headers.get('User-Agent')
-                    vehicle_query = {'filter[trip]': map_query.get('trip', ''), 'page[limit]': '10'}
+                    trip = str(map_query.get('trip', '') or '').strip()
+                    vehicle = str(map_query.get('vehicle', '') or '').strip()
+                    map_endpoint = '/vehicles'
+                    vehicle_query = {'filter[trip]': trip, 'page[limit]': '10'}
+                    if vehicle:
+                        map_endpoint = f'/vehicles/{vehicle}'
+                        vehicle_query = {}
                     cached_vehicle_entry = get_or_refresh_cached_payload(
                         transit,
-                        '/vehicles',
+                        map_endpoint,
                         vehicle_query,
                         client_ip=client_ip,
                         user_agent=user_agent,
                     )
                     payload = build_vehicle_snapshot(transit, map_query, cached_vehicle_entry)
+                    route = str(map_query.get('route', '') or '').strip()
+                    if (
+                        canonical_transit_name(transit).startswith('boston')
+                        and route
+                        and not payload.get('data', {}).get('available')
+                    ):
+                        route_cached_entry = get_or_refresh_cached_payload(
+                            transit,
+                            '/vehicles',
+                            {'filter[route]': route, 'page[limit]': '25'},
+                            client_ip=client_ip,
+                            user_agent=user_agent,
+                        )
+                        route_payload = build_vehicle_snapshot(
+                            transit,
+                            {
+                                'trip': str(map_query.get('trip', '') or f'route:{route}'),
+                                'route': route,
+                            },
+                            route_cached_entry,
+                        )
+                        if route_payload.get('data', {}).get('available'):
+                            route_payload['status'] = 'warning'
+                            route_payload['message'] = (
+                                'Direct vehicle match was unavailable; showing the latest mapped vehicle on this route.'
+                            )
+                            payload = route_payload
                     body = {'status': payload.get('status', 'ok'), 'data': payload.get('data', {})}
                     if payload.get('message'):
                         body['message'] = payload['message']

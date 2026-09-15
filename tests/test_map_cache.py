@@ -70,3 +70,58 @@ def test_build_vehicle_snapshot_marks_stale_cached_position_as_warning():
     assert payload['data']['available'] is True
     assert payload['data']['latitude'] == 42.3601
     assert 'Data is stale.' in payload['message']
+
+
+def test_build_vehicle_snapshot_accepts_single_vehicle_object_payload():
+    cached_vehicle_entry = {
+        'data': {
+            'data': {
+                'id': '1718',
+                'attributes': {
+                    'latitude': '42.680553',
+                    'longitude': '-71.149925',
+                    'bearing': '149',
+                },
+            }
+        },
+        'expires_at': time.time() + 60,
+        'fetched_at': time.time() - 2,
+    }
+
+    payload = server.build_vehicle_snapshot(
+        'boston-commuterrail',
+        {'trip': 'NorthBase-825696-244', 'vehicle': '1718'},
+        cached_vehicle_entry,
+    )
+
+    assert payload['status'] == 'ok'
+    assert payload['data']['available'] is True
+    assert payload['data']['trip'] == 'NorthBase-825696-244'
+    assert payload['data']['latitude'] == 42.680553
+    assert payload['data']['longitude'] == -71.149925
+
+
+def test_build_vehicle_snapshot_allows_vehicle_without_trip():
+    cached_vehicle_entry = {
+        'data': {
+            'data': {
+                'id': '1800',
+                'attributes': {
+                    'latitude': '42.41119',
+                    'longitude': '-71.07676',
+                },
+            }
+        },
+        'expires_at': time.time() + 60,
+        'fetched_at': time.time(),
+    }
+
+    payload = server.build_vehicle_snapshot(
+        'boston-commuterrail',
+        {'vehicle': '1800'},
+        cached_vehicle_entry,
+    )
+
+    assert payload['status'] == 'ok'
+    assert payload['data']['available'] is True
+    assert payload['data']['trip'] == '1800'
