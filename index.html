@@ -68,35 +68,41 @@
     .map-glyph {
       position: relative;
       display: block;
-      width: 21px;
-      height: 19px;
-      overflow: hidden;
-      border: 1px solid var(--ink);
-      border-radius: 3px;
-      background: linear-gradient(90deg, #ef8b5f 0 33%, #78b9a0 33% 66%, #7fa9cf 66%);
-      transform: skewY(-10deg);
+      width: 25px;
+      height: 24px;
     }
-    .map-glyph::before,
-    .map-glyph::after {
+    .map-glyph::before {
       content: "";
       position: absolute;
-      top: 0;
-      bottom: 0;
-      width: 1px;
-      background: rgba(16,42,67,0.55);
+      left: 1px;
+      right: 1px;
+      bottom: 1px;
+      height: 11px;
+      background: var(--ink);
+      clip-path: polygon(0 100%, 20% 0, 40% 0, 46% 18%, 29% 18%, 15% 100%, 85% 100%, 71% 18%, 54% 18%, 60% 0, 80% 0, 100% 100%);
     }
-    .map-glyph::before { left: 33%; }
-    .map-glyph::after { left: 66%; }
     .map-glyph i {
       position: absolute;
-      left: 8px;
-      top: 4px;
+      left: 6px;
+      top: 0;
+      width: 13px;
+      height: 17px;
+      border: 4px solid var(--ink);
+      border-radius: 50% 50% 50% 0;
+      background: var(--ink);
+      transform: rotate(-45deg);
+      z-index: 1;
+    }
+    .map-glyph i::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
       width: 5px;
       height: 5px;
-      border: 1px solid white;
       border-radius: 50%;
-      background: var(--ink);
-      z-index: 1;
+      background: white;
+      transform: translate(-50%, -50%);
     }
   </style>
   <style>
