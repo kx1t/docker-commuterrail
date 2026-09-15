@@ -125,3 +125,21 @@ def test_build_vehicle_snapshot_allows_vehicle_without_trip():
     assert payload['status'] == 'ok'
     assert payload['data']['available'] is True
     assert payload['data']['trip'] == '1800'
+
+
+def test_extract_mbta_route_from_trip_payload_reads_relationship_route_id():
+    payload = {
+        'data': {
+            'id': 'NorthBase-825641-1240',
+            'type': 'trip',
+            'relationships': {
+                'route': {
+                    'data': {'id': 'CR-Haverhill', 'type': 'route'}
+                }
+            },
+        }
+    }
+
+    route = server.extract_mbta_route_from_trip_payload(payload)
+
+    assert route == 'CR-Haverhill'

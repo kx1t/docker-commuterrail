@@ -576,6 +576,17 @@ def normalize_mbta_vehicle_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     return {'data': []}
 
 
+def extract_mbta_route_from_trip_payload(payload: Dict[str, Any]) -> str:
+    data = payload.get('data') or {}
+    route = (((data.get('relationships') or {}).get('route') or {}).get('data') or {}).get('id')
+    if route:
+        return str(route).strip()
+    for included in payload.get('included') or []:
+        if (included.get('type') or '') == 'route' and included.get('id'):
+            return str(included.get('id')).strip()
+    return ''
+
+
 def build_vehicle_snapshot(transit: str, query: Optional[Dict[str, Any]] = None, cached_vehicle_entry: Optional[Dict[str, Any]] = None):
     normalized = canonical_transit_name(transit)
     trip = str((query or {}).get('trip') or '').strip()
@@ -824,6 +835,16 @@ class TransitCacheHandler(BaseHTTPRequestHandler):
                     )
                     payload = build_vehicle_snapshot(transit, map_query, cached_vehicle_entry)
                     route = str(map_query.get('route', '') or '').strip()
+                    if canonical_transit_name(transit).startswith('boston') and not route and trip:
+                        trip_cached_entry = get_or_refresh_cached_payload(
+                            transit,
+                            f'/trips/{trip}',
+                            {},
+                            client_ip=client_ip,
+                            user_agent=user_agent,
+                        )
+                        if trip_cached_entry is not None:
+                            route = extract_mbta_route_from_trip_payload(trip_cached_entry.get('data') or {})
                     if (
                         canonical_transit_name(transit).startswith('boston')
                         and route
