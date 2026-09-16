@@ -1045,6 +1045,9 @@
     function settingsStorageKey(transit){
       return `${SETTINGS_PREFIX}-${canonicalTransit(transit)}`;
     }
+    function lineSettingsStorageKey(transit,routeId){
+      return `${SETTINGS_PREFIX}-${canonicalTransit(transit)}-${String(routeId||'').trim()}`;
+    }
     function readSavedSettings(transit){
       const mode=canonicalTransit(transit);
       try{
@@ -1067,6 +1070,10 @@
       }
       return {};
     }
+    function readSavedLineSettings(transit,routeId){
+      if(!routeId)return {};
+      try{return JSON.parse(localStorage.getItem(lineSettingsStorageKey(transit,routeId))||'{}')||{}}catch(error){console.warn('Could not read saved line settings',error);return {}}
+    }
     function writeSavedSettings(transit,settings){
       const mode=canonicalTransit(transit);
       const payload=JSON.stringify({routeId:settings.routeId,remoteId:settings.remoteId,endpointId:settings.endpointId});
@@ -1077,6 +1084,10 @@
       if(isBostonTransit(mode)){
         localStorage.setItem(LAST_BOSTON_MODE_KEY,mode);
       }
+    }
+    function writeSavedLineSettings(transit,routeId,settings){
+      if(!routeId)return;
+      try{localStorage.setItem(lineSettingsStorageKey(transit,routeId),JSON.stringify({endpointId:settings.endpointId,remoteId:settings.remoteId}))}catch(error){console.warn('Could not save line settings',error)}
     }
 
     const el={
@@ -1188,7 +1199,7 @@
     function populateSettingsLineOptions(){el.lineSelect.innerHTML=settingsRoutes.map((route)=>`<option value="${route.id}">${routeLabel(route,settingsTransit)}</option>`).join('');el.lineSelect.value=settingsRouteId}
     function populateSettingsStopOptions(){el.endpointSelect.innerHTML=settingsStops.map((station)=>`<option value="${station.id}">${stopName(station,settingsTransit)}</option>`).join('');el.remoteSelect.innerHTML=settingsStops.map((station)=>`<option value="${station.id}">${stopName(station,settingsTransit)}</option>`).join('');el.endpointSelect.value=settingsEndpointId;el.remoteSelect.value=settingsRemoteId}
     async function loadRoutesForTransit(transit){const profile=profileForTransit(transit);if(isParisTransit(transit))return PARIS_LINES;const data=records(await mbta('/routes',{'filter[type]':profile.routeType},transit));if(!data.length)throw Error('No routes found for selected authority');return data}
-    async function syncSettingsTransit(nextTransit,preferDefaults=false){const version=++settingsSyncVersion;const next=canonicalTransit(nextTransit);settingsTransit=next;const profile=profileForTransit(next);const saved=readSavedSettings(next);const nextRoutes=await loadRoutesForTransit(next);if(version!==settingsSyncVersion)return;settingsRoutes=nextRoutes;settingsRouteId=saved.routeId||profile.defaultRouteId||settingsRoutes[0]?.id||'';if(!settingsRoutes.some((route)=>route.id===settingsRouteId)){settingsRouteId=settingsRoutes[0]?.id||''}populateSettingsLineOptions();const nextStops=await loadStopsForRoute(next,settingsRouteId);if(version!==settingsSyncVersion)return;if(!nextStops.length)throw Error('No stations found for selected route');settingsStops=nextStops;const ordered=orderedStations(settingsStops,next);const first=ordered[0]?.id||settingsStops[0]?.id||'';const second=ordered.at(-1)?.id||settingsStops.find((station)=>station.id!==first)?.id||first;settingsEndpointId=preferDefaults?first:(saved.endpointId||first);settingsRemoteId=preferDefaults?second:(saved.remoteId||second);if(!settingsStops.some((station)=>station.id===settingsEndpointId)){settingsEndpointId=first}if(!settingsStops.some((station)=>station.id===settingsRemoteId)||settingsRemoteId===settingsEndpointId){settingsRemoteId=second}populateSettingsStopOptions()}
+    async function syncSettingsTransit(nextTransit,preferDefaults=false){const version=++settingsSyncVersion;const next=canonicalTransit(nextTransit);settingsTransit=next;const profile=profileForTransit(next);const saved=readSavedSettings(next);const nextRoutes=await loadRoutesForTransit(next);if(version!==settingsSyncVersion)return;settingsRoutes=nextRoutes;settingsRouteId=saved.routeId||profile.defaultRouteId||settingsRoutes[0]?.id||'';if(!settingsRoutes.some((route)=>route.id===settingsRouteId)){settingsRouteId=settingsRoutes[0]?.id||''}populateSettingsLineOptions();const nextStops=await loadStopsForRoute(next,settingsRouteId);if(version!==settingsSyncVersion)return;if(!nextStops.length)throw Error('No stations found for selected route');settingsStops=nextStops;const lineSaved=readSavedLineSettings(next,settingsRouteId);const ordered=orderedStations(settingsStops,next);const first=ordered[0]?.id||settingsStops[0]?.id||'';const second=ordered.at(-1)?.id||settingsStops.find((station)=>station.id!==first)?.id||first;const savedForLine=saved.routeId===settingsRouteId?saved:{};settingsEndpointId=preferDefaults?first:(lineSaved.endpointId||savedForLine.endpointId||first);settingsRemoteId=preferDefaults?second:(lineSaved.remoteId||savedForLine.remoteId||second);if(!settingsStops.some((station)=>station.id===settingsEndpointId)){settingsEndpointId=first}if(!settingsStops.some((station)=>station.id===settingsRemoteId)||settingsRemoteId===settingsEndpointId){settingsRemoteId=second}populateSettingsStopOptions()}
     function showSettingsLoadingState(){const loading='<option value="" selected>Loading...</option>';el.lineSelect.innerHTML=loading;el.endpointSelect.innerHTML=loading;el.remoteSelect.innerHTML=loading;el.lineSelect.disabled=true;el.endpointSelect.disabled=true;el.remoteSelect.disabled=true}
     function showSettingsReadyState(){el.lineSelect.disabled=false;el.endpointSelect.disabled=false;el.remoteSelect.disabled=false}
     function openSettingsDialog(){if(el.dialog?.open)return;settingsTransit=currentTransit;settingsRoutes=[...routes];settingsStops=[...routeStops];settingsRouteId=selectedRouteId;settingsEndpointId=selectedEndpointId;settingsRemoteId=selectedRemoteId;populateSettingsAuthorityOptions();if(settingsRoutes.length&&settingsStops.length){populateSettingsLineOptions();populateSettingsStopOptions();showSettingsReadyState()}else{showSettingsLoadingState()}if(typeof el.dialog.showModal==='function')el.dialog.showModal();else el.dialog.setAttribute('open','open');syncSettingsTransit(currentTransit,false).then(showSettingsReadyState).catch((error)=>{console.error(error);showSettingsReadyState()})}
@@ -1550,9 +1561,11 @@
           const nextStops=await loadStopsForRoute(settingsTransit,settingsRouteId);
           if(version!==settingsSyncVersion)return;
           settingsStops=nextStops;
+          const lineSaved=readSavedLineSettings(settingsTransit,settingsRouteId);
           const ordered=orderedStations(settingsStops,settingsTransit);
-          settingsEndpointId=ordered[0]?.id||settingsStops[0]?.id||'';
-          settingsRemoteId=ordered.at(-1)?.id||settingsStops.find((station)=>station.id!==settingsEndpointId)?.id||settingsEndpointId;
+          settingsEndpointId=lineSaved.endpointId&&settingsStops.some((station)=>station.id===lineSaved.endpointId)?lineSaved.endpointId:ordered[0]?.id||settingsStops[0]?.id||'';
+          settingsRemoteId=lineSaved.remoteId&&settingsStops.some((station)=>station.id===lineSaved.remoteId)?lineSaved.remoteId:ordered.at(-1)?.id||settingsStops.find((station)=>station.id!==settingsEndpointId)?.id||settingsEndpointId;
+          writeSavedLineSettings(settingsTransit,settingsRouteId,{endpointId:settingsEndpointId,remoteId:settingsRemoteId});
           populateSettingsStopOptions();
         } catch (error) {
           console.error(error);
@@ -1587,6 +1600,7 @@
         selectedEndpointId=settingsEndpointId;
         selectedRemoteId=settingsRemoteId;
         writeSavedSettings(currentTransit,{routeId:selectedRouteId,endpointId:selectedEndpointId,remoteId:selectedRemoteId});
+        writeSavedLineSettings(currentTransit,selectedRouteId,{endpointId:selectedEndpointId,remoteId:selectedRemoteId});
         replaceTransitInUrl(currentTransit);
         closeSettingsDialog();
         updateRouteText();
