@@ -17,9 +17,15 @@
 
 FROM debian:trixie-slim AS fonts
 
+# Enable pipefail so the piped commands below fail the build on error instead
+# of only checking the exit status of the final command in the pipeline.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 WORKDIR /app
 
+# hadolint ignore=DL3008
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
@@ -51,12 +57,17 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     Cache-Time-Boston-Route=43200 \
     Cache-Time-Boston-Trip=43200 \
     Cache-Time-Paris-Default=60 \
-    HTTP_WORKERS=10 \
-    PRIM_API_KEY=""
+    HTTP_WORKERS=10
+
+# PRIM_API_KEY/MBTA_API_KEY are intentionally not declared here (avoids baking
+# secret-looking values into image layers); server.py defaults to '' via
+# os.getenv() and docker-compose.yml supplies the real values at runtime.
 
 WORKDIR /app
 
+# hadolint ignore=DL3008
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends python3 python3-venv ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && python3 -m venv /opt/venv
