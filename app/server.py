@@ -18,6 +18,8 @@
 
 import datetime
 import copy
+import gzip
+import hashlib
 import json
 import mimetypes
 import os
@@ -42,6 +44,9 @@ except ModuleNotFoundError:
         extract_mbta_vehicle_snapshot,
         unavailable_snapshot,
     )
+
+mimetypes.add_type('font/woff2', '.woff2')
+mimetypes.add_type('font/woff', '.woff')
 
 PRIM_API = 'https://prim.iledefrance-mobilites.fr/marketplace'
 MBTA_API = 'https://api-v3.mbta.com'
@@ -811,7 +816,8 @@ def build_json_response(transit: str, endpoint: str, payload=None, status='ok', 
 
 def serve_static_file(self, relative_path: str):
     candidate = (STATIC_ROOT / relative_path.lstrip('/')).resolve()
-    if not str(candidate).startswith(str(STATIC_ROOT.resolve())):
+    static_root_resolved = STATIC_ROOT.resolve()
+    if not str(candidate).startswith(str(static_root_resolved)):
         candidate = STATIC_ROOT / 'index.html'
     if candidate.is_dir():
         candidate = STATIC_ROOT / 'index.html'
@@ -819,8 +825,32 @@ def serve_static_file(self, relative_path: str):
         candidate = STATIC_ROOT / 'index.html'
     data = candidate.read_bytes()
     mime_type = mimetypes.guess_type(str(candidate))[0] or 'application/octet-stream'
+    etag = '"' + hashlib.sha1(data).hexdigest()[:16] + '"'
+    # Font files are content-hashed by name, so they can be cached forever; other
+    # static assets (index.html, fonts.css) rely on ETag revalidation instead.
+    try:
+        is_immutable_asset = candidate.relative_to(static_root_resolved).parts[:1] == ('fonts',) and candidate.suffix in ('.woff2', '.woff')
+    except ValueError:
+        is_immutable_asset = False
+    cache_control = 'public, max-age=31536000, immutable' if is_immutable_asset else 'no-cache'
+    if self.headers.get('If-None-Match') == etag:
+        self.send_response(304)
+        self.send_header('ETag', etag)
+        self.send_header('Cache-Control', cache_control)
+        self.end_headers()
+        return
+    content_encoding = None
+    accept_encoding = self.headers.get('Accept-Encoding', '')
+    if mime_type in ('text/html', 'text/css', 'application/javascript') and 'gzip' in accept_encoding:
+        data = gzip.compress(data, compresslevel=6)
+        content_encoding = 'gzip'
     self.send_response(200)
     self.send_header('Content-Type', mime_type)
+    self.send_header('ETag', etag)
+    self.send_header('Cache-Control', cache_control)
+    if content_encoding:
+        self.send_header('Content-Encoding', content_encoding)
+    self.send_header('Content-Length', str(len(data)))
     self.end_headers()
     self.wfile.write(data)
 

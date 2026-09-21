@@ -15,6 +15,28 @@
 # You should have received a copy of the GNU General Public License
 # along with docker-commuterrail. If not, see <https://www.gnu.org/licenses/>.
 
+FROM debian:trixie-slim AS fonts
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Self-host the Google Fonts used by index.html so the browser never needs to
+# open connections to fonts.googleapis.com/fonts.gstatic.com at page load.
+# This runs in its own build stage so curl/ca-certificates aren't needed in
+# the runtime image, and the layer stays cached across app code changes.
+RUN set -eux; \
+    mkdir -p /app/fonts; \
+    curl -fsSL --retry 3 -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36" \
+      "https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap" \
+      -o /tmp/fonts.css; \
+    grep -oE 'https://fonts\.gstatic\.com/[^)]+\.woff2' /tmp/fonts.css | sort -u | while read -r url; do \
+      curl -fsSL --retry 3 "$url" -o "/app/fonts/$(basename "$url")"; \
+    done; \
+    sed -E 's#https://fonts\.gstatic\.com/[^)]+/([A-Za-z0-9_-]+\.woff2)#fonts/\1#g' /tmp/fonts.css > /app/fonts.css
+
 FROM debian:trixie-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -35,13 +57,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3 python3-venv ca-certificates curl \
+    && apt-get install -y --no-install-recommends python3 python3-venv ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && python3 -m venv /opt/venv
 
 ENV PATH="/opt/venv/bin:$PATH"
 
-COPY README.md /app/README.md
+COPY --from=fonts /app/fonts /app/fonts
+COPY --from=fonts /app/fonts.css /app/fonts.css
+
 COPY app/server.py /app/app/server.py
 COPY app/map_snapshot.py /app/app/map_snapshot.py
 COPY index.html /app/index.html
